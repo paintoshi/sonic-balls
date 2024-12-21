@@ -1,80 +1,114 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Sonic Balls</title>
-    <style>
-        body { margin: 0; }
-        canvas { display: block; }
-        #stats {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            color: white;
-            font-family: Arial, sans-serif;
-            background: rgba(0,0,0,0.7);
-            padding: 10px;
-            border-radius: 8px;
-        }
-        #github-link {
-            position: fixed;
-            top: 16px;
-            right: 16px;
-            opacity: 0.7;
-            transition: opacity 0.2s ease-in-out;
-        }
-        #github-link:hover {
-            opacity: 0.85;
-        }
-        #github-svg {
-            width: 32px;
-            height: 32px;
-        }
-    </style>
+  <title>Sonic Balls</title>
+  <meta name="description" content="A physical visualizer for the Sonic blockchain"/>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+
+  <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-title" content="Sonic Balls" />
+  <link rel="manifest" href="/site.webmanifest" />
+
+  <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="expires" content="0">
+  <meta http-equiv="pragma" content="no-cache">
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Sonic Balls" />
+  <meta name="twitter:image" content="https://paintoshi.dev/og.png" />
+  <meta name="twitter:domain" content="paintoshi.dev" />
+  <meta name="twitter:site" content="@paintoshi" />
+  <meta name="twitter:creator" content="@paintoshi" />
+  <meta name="twitter:description" content="A physical visualizer for the Sonic blockchain" />
+  <meta property="og:title" content="Sonic Balls" />
+  <meta property="og:description" content="A physical visualizer for the Sonic blockchain" />
+  <meta property="og:image" content="https://balls.paintoshi.dev/og.png" />
+  <meta property="og:url" content="https://balls.paintoshi.dev" />
 </head>
 <body>
-    <div id="toggle-container"></div>
-    <a id="github-link" href="https://github.com/paintoshi/sonic-balls" target="_blank">
-        <svg id="github-svg" version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
-            viewBox="0 0 512 512" style="enable-background:new 0 0 512 512;" xml:space="preserve">
-        <style type="text/css">
-            .st0{fill-rule:evenodd;clip-rule:evenodd;fill:#FFFFFF;}
-        </style>
-        <g>
-            <path class="st0" d="M296.1,354.2c49.9-5.9,102.9-24,102.9-110.2c0-24.5-8.6-44.4-22.7-59.9c2.3-5.9,9.5-28.1-2.7-58.9
-                c0,0-18.1-5.9-60.8,22.7c-18.1-5-38.1-8.2-56.7-8.2c-19.1,0-39,3.2-56.7,8.2c-43.1-28.6-61.2-22.7-61.2-22.7
-                c-12.2,30.8-5,53.1-2.7,58.9c-14.1,15.4-22.7,35.4-22.7,59.9c0,86.2,53.1,104.3,102.9,110.2c-6.3,5.5-12.2,15.9-14.5,30.4
-                c-12.7,5.4-45.8,15.9-65.8-18.6c0,0-11.8-21.3-34-22.7c0,0-22.2-0.5-1.8,13.6c0,0,15,6.8,24.9,32.7c0,0,13.6,43.1,76.2,29.5v38.5
-                c0,5.9-4.5,12.7-15.9,10.9C96.1,439,32.2,354.6,32.2,255.8c0-123.8,100.2-224,224-224c123.3,0,224,100.2,223.6,224
-                c0,98.9-63.9,182.8-152.8,212.7c-11.3,2.3-15.9-4.5-15.9-10.9v-62.1C311.1,374.6,304.3,361,296.1,354.2L296.1,354.2z M512,256.2
-                C512,114.7,397.3,0,256.2,0C114.7,0,0,114.7,0,256.2C0,397.3,114.7,512,256.2,512C397.3,512,512,397.3,512,256.2L512,256.2z"/>
-        </g>
-        </svg>
-    </a>
-    <div style="display: none;">
-        <svg id="platform-logo" data-name="platform-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 309.99 309.99">
-            <defs>
-              <style>
-                .cls-1 {
-                  fill: #f5f5f5;
-                }
-              </style>
-            </defs>
-            <path class="cls-1" d="M180.26,185.07l.03-.02s-.03.02-.05.03c.01,0,.02,0,.03,0h0Z"/>
-            <path class="cls-1" d="M180.24,185.08c-46.81,14.06-85.52,34.57-109.77,58.59l-1.07,1.07c6.45,6.1,13.52,11.56,21.16,16.2l1.64-2.01c6.62-8.09,13.72-15.9,21.11-23.26,19.83-19.76,42.51-36.86,66.93-50.59Z"/>
-            <path class="cls-1" d="M185.65,164.24H31.12c1.87,25.07,11.18,48.06,25.79,66.76l.67-.67c15.01-14.81,34.55-28.27,58.12-40,20.66-10.29,44.38-19.12,69.95-26.09Z"/>
-            <path class="cls-1" d="M126.41,61.2c41.89,41.74,94.61,69.34,152.44,79.81-6.97-61.88-59.64-110.01-123.64-110.01-16.9,0-33.01,3.37-47.72,9.45,5.97,7.19,12.35,14.19,18.92,20.76h0Z"/>
-            <path class="cls-1" d="M70.47,66.31c24.25,24.06,62.98,44.54,109.8,58.63-24.44-13.76-47.14-30.85-66.98-50.62-7.37-7.34-14.46-15.15-21.11-23.26l-1.64-2.01c-7.64,4.64-14.71,10.09-21.13,16.19l1.07,1.07h-.01Z"/>
-            <path class="cls-1" d="M126.41,248.78c-6.6,6.57-12.97,13.57-18.92,20.76,14.69,6.08,30.82,9.45,47.72,9.45,64,0,116.67-48.14,123.66-110.04-57.82,10.47-110.54,38.07-152.44,79.81l-.02.02Z"/>
-            <path class="cls-1" d="M115.67,119.62v.02c-23.55-11.73-43.08-25.2-58.09-39.99l-.67-.67c-14.61,18.7-23.92,41.69-25.79,66.76h154.5c-25.56-6.97-49.26-15.8-69.95-26.12Z"/>
-          </svg>
+  <div id="toggle-container"></div>
+  <a id="about-link" href="index.html#" id="info-button">?</a>
+  <a id="github-link" href="https://github.com/paintoshi/sonic-balls" target="_blank">
+    <svg id="github-svg" version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+      viewBox="0 0 512 512" style="enable-background:new 0 0 512 512;" xml:space="preserve">
+    <style type="text/css">
+      .st0{fill-rule:evenodd;clip-rule:evenodd;fill:#FFFFFF;}
+    </style>
+    <g>
+      <path class="st0" d="M296.1,354.2c49.9-5.9,102.9-24,102.9-110.2c0-24.5-8.6-44.4-22.7-59.9c2.3-5.9,9.5-28.1-2.7-58.9
+        c0,0-18.1-5.9-60.8,22.7c-18.1-5-38.1-8.2-56.7-8.2c-19.1,0-39,3.2-56.7,8.2c-43.1-28.6-61.2-22.7-61.2-22.7
+        c-12.2,30.8-5,53.1-2.7,58.9c-14.1,15.4-22.7,35.4-22.7,59.9c0,86.2,53.1,104.3,102.9,110.2c-6.3,5.5-12.2,15.9-14.5,30.4
+        c-12.7,5.4-45.8,15.9-65.8-18.6c0,0-11.8-21.3-34-22.7c0,0-22.2-0.5-1.8,13.6c0,0,15,6.8,24.9,32.7c0,0,13.6,43.1,76.2,29.5v38.5
+        c0,5.9-4.5,12.7-15.9,10.9C96.1,439,32.2,354.6,32.2,255.8c0-123.8,100.2-224,224-224c123.3,0,224,100.2,223.6,224
+        c0,98.9-63.9,182.8-152.8,212.7c-11.3,2.3-15.9-4.5-15.9-10.9v-62.1C311.1,374.6,304.3,361,296.1,354.2L296.1,354.2z M512,256.2
+        C512,114.7,397.3,0,256.2,0C114.7,0,0,114.7,0,256.2C0,397.3,114.7,512,256.2,512C397.3,512,512,397.3,512,256.2L512,256.2z"/>
+    </g>
+    </svg>
+  </a>
+  <div id="info" class="hidden">
+    <div id="content">
+        <div id="content-background">
+        <h1>Sonic Balls</h1><br />
+        <span class="address"><strong>Donation: 0x5b36ECcFFAaB547190BAf97dEd7B03E10F83d63f</strong></span><br/><br/>
+        <h2>How does it work?</h2>
+        <span class="explain">
+        Transactions are recorded live from the Sonic network using a public RPC.<br/>
+        Ball size and color coresponds to the transaction amount.<br/>
+        Click on balls to see the transaction details.<br/><br/>
+        <p class="address"><a href="https://github.com/paintoshi/sonic-balls" target="_blank">Github Source</a></p><br/>
+      </span>
+        <p><a href="#" id="close-button">CLOSE</a></p>
+          </div>
     </div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
-    <script src="https://unpkg.com/three/examples/js/renderers/CSS2DRenderer.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="visualizer.js"></script>
-    <script>
-        window.ignoreZeroTransactions = false;
-    </script>
+  </div>
+  <div style="display: none;">
+    <svg id="platform-logo" data-name="platform-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 309.99 309.99">
+      <defs>
+        <style>
+        .cls-1 {
+          fill: #f5f5f5;
+        }
+        </style>
+      </defs>
+      <path class="cls-1" d="M180.26,185.07l.03-.02s-.03.02-.05.03c.01,0,.02,0,.03,0h0Z"/>
+      <path class="cls-1" d="M180.24,185.08c-46.81,14.06-85.52,34.57-109.77,58.59l-1.07,1.07c6.45,6.1,13.52,11.56,21.16,16.2l1.64-2.01c6.62-8.09,13.72-15.9,21.11-23.26,19.83-19.76,42.51-36.86,66.93-50.59Z"/>
+      <path class="cls-1" d="M185.65,164.24H31.12c1.87,25.07,11.18,48.06,25.79,66.76l.67-.67c15.01-14.81,34.55-28.27,58.12-40,20.66-10.29,44.38-19.12,69.95-26.09Z"/>
+      <path class="cls-1" d="M126.41,61.2c41.89,41.74,94.61,69.34,152.44,79.81-6.97-61.88-59.64-110.01-123.64-110.01-16.9,0-33.01,3.37-47.72,9.45,5.97,7.19,12.35,14.19,18.92,20.76h0Z"/>
+      <path class="cls-1" d="M70.47,66.31c24.25,24.06,62.98,44.54,109.8,58.63-24.44-13.76-47.14-30.85-66.98-50.62-7.37-7.34-14.46-15.15-21.11-23.26l-1.64-2.01c-7.64,4.64-14.71,10.09-21.13,16.19l1.07,1.07h-.01Z"/>
+      <path class="cls-1" d="M126.41,248.78c-6.6,6.57-12.97,13.57-18.92,20.76,14.69,6.08,30.82,9.45,47.72,9.45,64,0,116.67-48.14,123.66-110.04-57.82,10.47-110.54,38.07-152.44,79.81l-.02.02Z"/>
+      <path class="cls-1" d="M115.67,119.62v.02c-23.55-11.73-43.08-25.2-58.09-39.99l-.67-.67c-14.61,18.7-23.92,41.69-25.79,66.76h154.5c-25.56-6.97-49.26-15.8-69.95-26.12Z"/>
+      </svg>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+  <script src="https://unpkg.com/three/examples/js/renderers/CSS2DRenderer.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="visualizer.js"></script>
+  <script>
+    window.ignoreZeroTransactions = false;
+    document.addEventListener('DOMContentLoaded', function() {
+      // Get the elements
+      const infoButton = document.getElementById('about-link');
+      const infoDiv = document.getElementById('info');
+      const closeButton = document.getElementById('close-button');
+
+      // Show info when ABOUT is clicked
+      infoButton.addEventListener('click', function(e) {
+          e.preventDefault();
+          infoDiv.classList.remove('hidden');
+      });
+
+      // Hide info when CLOSE is clicked
+      closeButton.addEventListener('click', function(e) {
+          e.preventDefault();
+          infoDiv.classList.add('hidden');
+      });
+  });
+  </script>
 </body>
 </html>
