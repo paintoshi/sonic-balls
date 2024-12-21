@@ -282,7 +282,7 @@ function createStatsTexture() {
         ctx.textBaseline = 'middle';
         
         // Draw text in three lines
-        ctx.fillText(`Total Sent: ${totalSent.toFixed(4)} S`, canvas.width/2, canvas.height/4);
+        ctx.fillText(`Volume: ${totalSent.toFixed(4)} S`, canvas.width/2, canvas.height/4);
         ctx.fillText(`TPS: ${tps}`, canvas.width/2, canvas.height/2);
         ctx.fillText(`Balls: ${ballCount}`, canvas.width/2, canvas.height * 3/4);
         
@@ -333,6 +333,65 @@ function calculateTilt(sphereCount) {
     return Math.min(tiltProgress * MAX_TILT, MAX_TILT);
 }
 
+function createToggleButton() {
+    const container = document.getElementById('toggle-container');
+    
+    // Create toggle wrapper
+    const toggleWrapper = document.createElement('div');
+    toggleWrapper.className = 'fixed top-4 left-4 flex items-center gap-2 opacity-70';
+    
+    // Create the switch
+    const toggleSwitch = document.createElement('label');
+    toggleSwitch.className = 'relative inline-block w-12 h-6';
+    
+    // Create the checkbox input
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'sr-only';
+    
+    // Create the slider
+    const slider = document.createElement('span');
+    slider.className = `absolute cursor-pointer inset-0 rounded-full 
+        bg-gray-300 transition-colors duration-200
+        before:content-[''] before:absolute before:w-4 before:h-4 
+        before:left-1 before:bottom-1 before:bg-white before:rounded-full
+        before:transition-transform before:duration-200`;
+    
+    // Create label text
+    const label = document.createElement('span');
+    label.className = 'text-white font-semibold';
+    label.textContent = 'No 0-txs';
+    
+    // Add click handler
+    checkbox.addEventListener('change', () => {
+        window.ignoreZeroTransactions = checkbox.checked;
+        
+        // Update slider appearance
+        if (checkbox.checked) {
+            slider.className = `absolute cursor-pointer inset-0 rounded-full 
+                bg-blue-600 transition-colors duration-200
+                before:content-[''] before:absolute before:w-4 before:h-4 
+                before:left-1 before:bottom-1 before:bg-white before:rounded-full
+                before:transition-transform before:duration-200 before:translate-x-6`;
+            label.className = 'text-white font-semibold';
+        } else {
+            slider.className = `absolute cursor-pointer inset-0 rounded-full 
+                bg-gray-300 transition-colors duration-200
+                before:content-[''] before:absolute before:w-4 before:h-4 
+                before:left-1 before:bottom-1 before:bg-white before:rounded-full
+                before:transition-transform before:duration-200`;
+            label.className = 'text-white font-semibold';
+        }
+    });
+    
+    // Assemble the toggle
+    toggleSwitch.appendChild(checkbox);
+    toggleSwitch.appendChild(slider);
+    toggleWrapper.appendChild(toggleSwitch);
+    toggleWrapper.appendChild(label);
+    container.appendChild(toggleWrapper);
+}
+
 // Initialize the scene
 async function init() {
     // Create Three.js scene
@@ -370,6 +429,9 @@ async function init() {
 
     // Create ground
     await createGround();
+
+    // Create toggle button
+    createToggleButton();
 
     // Detect on click
     setupMouseHandlers();
@@ -582,6 +644,11 @@ async function getLatestBlockAndTransactions() {
 }
 
 function processTransaction(txData) {
+    // Check if we should ignore this transaction
+    if (window.ignoreZeroTransactions && txData.amount <= 0.000000000000000001) {
+        return; // Skip this transaction
+    }
+    
     sonic_sent += txData.amount;
     createSphere(txData.amount, txData.hash);
     
