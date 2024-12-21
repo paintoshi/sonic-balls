@@ -9,12 +9,28 @@ let room;
 let hoveredSphere = null;
 let transactionTimes = [];
 let groundBody;
+
+// TX settings
 const RPC_URL = "https://rpc.soniclabs.com";
 const BLOCK_EXPLORER = "https://sonicscan.org/tx";
-const MIN_AMOUNT = 0.1;
-const MAX_AMOUNT = 100000;
-const MAX_SPHERES = 1000;
+const MIN_AMOUNT = 0.1; // Min Sonic
+const MAX_AMOUNT = 100000; // Max Sonic
 const TPS_WINDOW = 30000; // 30 seconds
+
+// Sphere settings
+const MAX_SPHERES = 1000; // Before FIFO
+const MIN_SPHERE_SIZE = 0.4;
+const MAX_SPHERE_SIZE = 12;
+const MIN_SPHERE_SEGMENTS = 10; // Resolution
+const MAX_SPHERE_SEGMENTS = 40; // Resolution
+
+// Ground settings
+const TILT_START = MAX_SPHERES / 2;  // Start tilting at half max
+const MAX_TILT = Math.PI / 90;      // 2 degree in radians max tilt
+
+// Environment settings
+const AMBIENT_INTENSITY = 0.4;
+const DIRECTIONAL_INTENSITY = 1;
 
 // Set up tooltip
 const tooltipDiv = document.createElement('div');
@@ -104,8 +120,8 @@ function createRoomEnvironment() {
 
   // Create gradient texture with dots
   const canvas = document.createElement('canvas');
-  canvas.width = 2048;
-  canvas.height = 2048;
+  canvas.width = 2500;
+  canvas.height = 2500;
   const ctx = canvas.getContext('2d');
 
   // Define colors
@@ -123,10 +139,10 @@ function createRoomEnvironment() {
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Add dots
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-  const dotSize = 1.5;
-  const spacing = 20;
+  // Add dots to the walls
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+  const dotSize = 2.5;
+  const spacing = 40;
   
   for (let x = 0; x < canvas.width; x += spacing) {
     for (let y = 0; y < canvas.height; y += spacing) {
@@ -146,7 +162,7 @@ function createRoomEnvironment() {
   const roomMaterial = new THREE.MeshStandardMaterial({
     map: wallTexture,
     side: THREE.BackSide,
-    metalness: 0.2,
+    metalness: 0.5,
     roughness: 0.8
   });
 
@@ -169,44 +185,13 @@ function createRoomEnvironment() {
   return room;
 }
 
+// TPS for stats display
 function calculateTPS() {
   const now = Date.now();
   // Remove transactions older than 30 seconds
   transactionTimes = transactionTimes.filter(time => now - time < TPS_WINDOW);
   // Calculate TPS based on remaining transactions
   return (transactionTimes.length / 30).toFixed(2);
-}
-
-function createLogoTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext('2d');
-  
-  // Create base color
-  ctx.fillStyle = '#0048b2';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  
-  // Load and draw SVG
-  const img = new Image();
-  const blob = new Blob([document.querySelector('#platform-logo').outerHTML], {type: 'image/svg+xml'});
-  const url = URL.createObjectURL(blob);
-  
-  return new Promise((resolve) => {
-    img.onload = () => {
-      // Draw the logo at 80% size, centered
-      const size = canvas.width * 0.9;
-      const x = (canvas.width - size) / 2;
-      const y = (canvas.height - size) / 2;
-      ctx.drawImage(img, x, y, size, size);
-      
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.needsUpdate = true;
-      URL.revokeObjectURL(url);
-      resolve(texture);
-    };
-    img.src = url;
-  });
 }
 
 function onSphereClick(event) {
@@ -230,11 +215,11 @@ function onSphereClick(event) {
   }
 }
 
-// Add this function to create the stats display texture
+// Stats display texture
 function createStatsTexture() {
   const canvas = document.createElement('canvas');
-  canvas.width = 560;
-  canvas.height = 280;
+  canvas.width = 500;
+  canvas.height = 250;
   const ctx = canvas.getContext('2d');
   
   function updateTexture(totalSent, ballCount, tps) {
@@ -253,8 +238,8 @@ function createStatsTexture() {
     const ry = 20;
     const width = canvas.width - 40;
     const height = canvas.height - 40;
-    const x = 25; // position
-    const y = 15;
+    const x = 27; // position
+    const y = 12;
      
     // Draw the border (slightly larger path)
     ctx.beginPath();
@@ -283,8 +268,8 @@ function createStatsTexture() {
     
     // Draw text in three lines
     ctx.fillText(`Volume: ${totalSent.toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 4})} S`, canvas.width/2, canvas.height/4);
-    ctx.fillText(`TPS: ${tps}`, canvas.width/2, canvas.height/2);
-    ctx.fillText(`Balls: ${ballCount}`, canvas.width/2, canvas.height * 3/4);
+    ctx.fillText(`TPS: ${tps}`, canvas.width/2, canvas.height/2.1);
+    ctx.fillText(`Balls: ${ballCount}`, canvas.width/2, canvas.height * 3/4.3);
     
     return new THREE.CanvasTexture(canvas);
   }
@@ -294,7 +279,7 @@ function createStatsTexture() {
   return texture;
 }
 
-// Add this to your init function after creating the room
+// Stats display
 function createStatsDisplay() {
   const statsTexture = createStatsTexture();
   
@@ -309,7 +294,8 @@ function createStatsDisplay() {
   });
 
   const statsPlane = new THREE.Mesh(geometry, material);
-  statsPlane.position.set(0, 20, -90); // Position on the front wall
+  statsPlane.position.set(0, 22.5, -224); // Position on the front wall
+  statsPlane.scale.set(2.05,2.05,2.05);
   scene.add(statsPlane);
 
   // Store reference to update the display - Added tps parameter here
@@ -321,9 +307,6 @@ function createStatsDisplay() {
 
 // Calculate ground tilt based on sphere count
 function calculateTilt(sphereCount) {
-  const TILT_START = MAX_SPHERES / 2;  // Start tilting at 500 spheres
-  const MAX_TILT = Math.PI / 90;      // 2 degree in radians
-  
   if (sphereCount <= TILT_START) {
     return 0;
   }
@@ -359,7 +342,7 @@ function createToggleButton() {
   
   // Create label text
   const label = document.createElement('span');
-  label.className = 'text-white font-semibold';
+  label.className = 'text-white font-semibold text-sm';
   label.textContent = 'No 0-txs';
   
   // Add click handler
@@ -415,10 +398,10 @@ async function init() {
   createStatsDisplay();
 
   // Rest of the init function remains the same...
-  const ambientLight = new THREE.AmbientLight(0x666666, 0.4);
+  const ambientLight = new THREE.AmbientLight(0x666666, AMBIENT_INTENSITY);
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xffead2, 1);
+  const directionalLight = new THREE.DirectionalLight(0xffead2, DIRECTIONAL_INTENSITY);
   directionalLight.position.set(10, 20, 20);
   directionalLight.castShadow = false;
   scene.add(directionalLight);
@@ -443,10 +426,43 @@ async function init() {
   window.addEventListener('resize', onWindowResize, false);
 }
 
+// Ground logo texture
+function createLogoTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  
+  // Create base color
+  ctx.fillStyle = '#0048b2';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Load and draw SVG
+  const img = new Image();
+  const blob = new Blob([document.querySelector('#platform-logo').outerHTML], {type: 'image/svg+xml'});
+  const url = URL.createObjectURL(blob);
+  
+  return new Promise((resolve) => {
+    img.onload = () => {
+      // Draw the logo at 80% size, centered
+      const size = canvas.width * 0.9;
+      const x = (canvas.width - size) / 2;
+      const y = (canvas.height - size) / 2;
+      ctx.drawImage(img, x, y, size, size);
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.needsUpdate = true;
+      URL.revokeObjectURL(url);
+      resolve(texture);
+    };
+    img.src = url;
+  });
+}
+
 // Create ground plane
 async function createGround() {
   // Physics ground
-  const width = 25;
+  const width = window.innerWidth < 1000 ? window.innerWidth / 30 : 25;
   const height = 2;
   const depth = 25;
   const groundShape = new CANNON.Box(new CANNON.Vec3(width, height, depth));
@@ -507,11 +523,10 @@ function createSphere(amount, txHash) {
   
   // Apply cubic power to favor smaller sizes
   // Higher power = more small spheres, fewer large ones
-  // Cube root of normalized value will give us volume-like scaling
   const weightedSize = Math.pow(normalizedSize, 3);
   
   // Map to final size range (0.4 to 12.4)
-  const size = 0.4 + (weightedSize * 12);
+  const size = MIN_SPHERE_SIZE + (weightedSize * MAX_SPHERE_SIZE);
   
   // Rest of the createSphere function remains the same...
   const sphereShape = new CANNON.Sphere(size);
@@ -533,9 +548,6 @@ function createSphere(amount, txHash) {
 
   // Determine sphere color based on amount
   let sphereColor;
-  // Calculate segments based on amount
-  const minSegments = 10;
-  const maxSegments = 48;
 
   // Get normalized value between 0 and 1 based on amount
   let normalizedAmount;
@@ -546,7 +558,7 @@ function createSphere(amount, txHash) {
   }
 
   // Calculate segments - scale between min and max segments
-  const segmentSize = Math.round(minSegments + (normalizedAmount * (maxSegments - minSegments)));
+  const segmentSize = Math.round(MIN_SPHERE_SEGMENTS + (normalizedAmount * (MAX_SPHERE_SEGMENTS - MIN_SPHERE_SEGMENTS)));
   if (amount > 1) {
     console.info(`${amount} S at ${txHash}`);
   }

@@ -53,7 +53,7 @@ a:hover{text-decoration:underline;}
 
 #github-link {
   position: fixed;
-  top: 16px;
+  top: 10px;
   right: 16px;
   opacity: 0.7;
   transition: opacity 0.2s ease-in-out;
@@ -65,7 +65,7 @@ a:hover{text-decoration:underline;}
 
 #about-link {
   position: fixed;
-  top: 7px;
+  top: 1px;
   right: 69px;
   opacity: 0.7;
   transition: opacity 0.2s ease-in-out;
@@ -98,9 +98,10 @@ a:hover{text-decoration:underline;}
 }
 
 #content{
-  -webkit-align-items: left;
-  -ms-flex-align: left;
-  align-items: left;
+  -webkit-align-items: center;
+  -ms-flex-align: center;
+  align-items: center;
+  text-align-last: center;
   display: -webkit-flex;
   display: -ms-flexbox;
   display: flex;
@@ -142,7 +143,7 @@ a:hover{text-decoration:underline;}
   #content p{font-size: 1.35vw;}
   #content span{font-size: 1vw;}
   #content-background {
-    width: 600px;
+    width: 500px;
     margin: auto;
   }
 }
@@ -167,21 +168,6 @@ a:hover{text-decoration:underline;}
     margin: auto;
   }
 
-  #play_button {
-    width: 128px;
-    height: 128px;
-    margin: -64px 0 0 -64px;
-  }
-
-  .switch-container span {
-    font-size: 14px;
-    line-height: 14px;
-  }
-
-  .info-line {
-    font-size: 10px !important;
-  }
-
   .explain {
     font-size: 1.8vh !important;
     line-height: 2.0vh !important;
@@ -192,7 +178,7 @@ a:hover{text-decoration:underline;}
   #content h1{font-size: 2.2vh;}
   #content p{font-size: 1.5vh;}
   #info{
-    padding:8vh;
+    padding:6vh;
   }
 }
 
@@ -204,7 +190,7 @@ and (max-width : 640px){
   }
 
   #info{
-    padding:4vh;
+    padding:2vh;
   }
 
   .address {
@@ -213,13 +199,6 @@ and (max-width : 640px){
   .explain {
     font-size: 9px !important;
     line-height: 12px !important;
-  }
-  .switch-container span {
-    font-size: 10px;
-    line-height: 10px;
-  }
-  .info-line {
-    font-size: 10px !important;
   }
 }
 
