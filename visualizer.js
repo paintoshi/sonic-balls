@@ -7,10 +7,14 @@ let sonic_sent = 0;
 let ground;
 let room;
 let hoveredSphere = null;
+let transactionTimes = [];
+let groundBody;
 const RPC_URL = "https://rpc.soniclabs.com";
-const BLOCK_EXPLORER = "https://sonicscan.org/tx"
-const MIN_AMOUNT = 0.1
-const MAX_AMOUNT = 100000
+const BLOCK_EXPLORER = "https://sonicscan.org/tx";
+const MIN_AMOUNT = 0.1;
+const MAX_AMOUNT = 100000;
+const MAX_SPHERES = 1000;
+const TPS_WINDOW = 30000; // 30 seconds
 
 // Set up tooltip
 const tooltipDiv = document.createElement('div');
@@ -95,19 +99,19 @@ const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
 function createRoomEnvironment() {
-    const roomGeometry = new THREE.BoxGeometry(250, 250, 250);
+    const roomGeometry = new THREE.BoxGeometry(250, 320, 250);
     roomGeometry.scale(-1, 1, -1);
 
     // Create gradient texture with dots
     const canvas = document.createElement('canvas');
-    canvas.width = 2048; // Increased for environment map
-    canvas.height = 1024; // Height should be half for equirectangular
+    canvas.width = 2048;
+    canvas.height = 2048;
     const ctx = canvas.getContext('2d');
 
     // Define colors
-    const darkBlue = '#0a1824';
+    const darkBlue = '#000';
     const brownish = '#492927';
-    const peach = '#9b6b4a';
+    const peach = '#a97552';
 
     // Create a more environment-map friendly gradient
     const gradientHeight = canvas.height;
@@ -147,7 +151,7 @@ function createRoomEnvironment() {
     });
 
     const room = new THREE.Mesh(roomGeometry, roomMaterial);
-    room.position.set(0, -50, -100);
+    room.position.set(0, -80, -100);
     scene.add(room);
 
     // Create environment map texture
@@ -163,6 +167,14 @@ function createRoomEnvironment() {
     envTexture.dispose();
 
     return room;
+}
+
+function calculateTPS() {
+    const now = Date.now();
+    // Remove transactions older than 30 seconds
+    transactionTimes = transactionTimes.filter(time => now - time < TPS_WINDOW);
+    // Calculate TPS based on remaining transactions
+    return (transactionTimes.length / 30).toFixed(2);
 }
 
 function createLogoTexture() {
@@ -218,6 +230,109 @@ function onSphereClick(event) {
     }
 }
 
+// Add this function to create the stats display texture
+function createStatsTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 560;
+    canvas.height = 280;
+    const ctx = canvas.getContext('2d');
+    
+    function updateTexture(totalSent, ballCount, tps) {
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Create gradient background for the "screen"
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, 'rgba(86, 54, 57, 1)');
+        gradient.addColorStop(1, 'rgba(51, 35, 50, 1)');
+       
+        const borderColor = 'rgb(7, 12, 33)';
+        const borderWidth = 5;
+       
+        // Draw rounded rectangle with border
+        const rx = 20; // border radius
+        const ry = 20;
+        const width = canvas.width - 40;
+        const height = canvas.height - 40;
+        const x = 25; // position
+        const y = 15;
+       
+        // Draw the border (slightly larger path)
+        ctx.beginPath();
+        ctx.moveTo(x + rx, y);
+        ctx.lineTo(x + width - rx, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + ry);
+        ctx.lineTo(x + width, y + height - ry);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - rx, y + height);
+        ctx.lineTo(x + rx, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - ry);
+        ctx.lineTo(x, y + ry);
+        ctx.quadraticCurveTo(x, y, x + rx, y);
+        ctx.lineWidth = borderWidth;
+        ctx.strokeStyle = borderColor;
+        ctx.stroke();
+       
+        // Fill the background
+        ctx.fillStyle = gradient;
+        ctx.fill();
+        
+        // Set text properties
+        ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+        ctx.font = '32px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // Draw text in three lines
+        ctx.fillText(`Total Sent: ${totalSent.toFixed(4)} S`, canvas.width/2, canvas.height/4);
+        ctx.fillText(`TPS: ${tps}`, canvas.width/2, canvas.height/2);
+        ctx.fillText(`Balls: ${ballCount}`, canvas.width/2, canvas.height * 3/4);
+        
+        return new THREE.CanvasTexture(canvas);
+    }
+    
+    const texture = updateTexture(0, 0, '0.00');
+    texture.update = updateTexture;
+    return texture;
+}
+
+// Add this to your init function after creating the room
+function createStatsDisplay() {
+    const statsTexture = createStatsTexture();
+    
+    // Create a plane geometry for the display
+    const geometry = new THREE.PlaneGeometry(40, 20);
+    const material = new THREE.MeshStandardMaterial({
+        map: statsTexture,
+        transparent: true,
+        opacity: 0.9,
+        metalness: 0.5,
+        roughness: 0.5
+    });
+
+    const statsPlane = new THREE.Mesh(geometry, material);
+    statsPlane.position.set(0, 20, -90); // Position on the front wall
+    scene.add(statsPlane);
+
+    // Store reference to update the display - Added tps parameter here
+    window.updateStatsDisplay = (totalSent, ballCount, tps) => {
+        material.map = statsTexture.update(totalSent, ballCount, tps);
+        material.map.needsUpdate = true;
+    };
+}
+
+// Calculate ground tilt based on sphere count
+function calculateTilt(sphereCount) {
+    const TILT_START = MAX_SPHERES / 2;  // Start tilting at 500 spheres
+    const MAX_TILT = Math.PI / 180;      // 1 degree in radians
+    
+    if (sphereCount <= TILT_START) {
+        return 0;
+    }
+    
+    // Calculate tilt between 0 and MAX_TILT based on sphere count
+    const tiltProgress = (sphereCount - TILT_START) / (MAX_SPHERES - TILT_START);
+    return Math.min(tiltProgress * MAX_TILT, MAX_TILT);
+}
+
 // Initialize the scene
 async function init() {
     // Create Three.js scene
@@ -232,18 +347,19 @@ async function init() {
     // Setup renderer - MUST come before creating room
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = false;
     renderer.domElement.style.cursor = 'pointer';
     document.body.appendChild(renderer.domElement);
 
     // Create room - NOW after renderer is initialized
     room = createRoomEnvironment();
+    createStatsDisplay();
 
     // Rest of the init function remains the same...
-    const ambientLight = new THREE.AmbientLight(0x666666, 0.5);
+    const ambientLight = new THREE.AmbientLight(0x666666, 0.4);
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffead2, 0.8);
+    const directionalLight = new THREE.DirectionalLight(0xffead2, 1);
     directionalLight.position.set(10, 20, 20);
     directionalLight.castShadow = false;
     scene.add(directionalLight);
@@ -268,13 +384,16 @@ async function init() {
 // Create ground plane
 async function createGround() {
     // Physics ground
-    const groundShape = new CANNON.Box(new CANNON.Vec3(25, 10, 25));
-    const groundBody = new CANNON.Body({
+    const width = 25;
+    const height = 2;
+    const depth = 25;
+    const groundShape = new CANNON.Box(new CANNON.Vec3(width, height, depth));
+    groundBody = new CANNON.Body({ // global var for reference
         mass: 0,
         shape: groundShape,
         material: new CANNON.Material()
     });
-    groundBody.position.set(0, -15, 0);
+    groundBody.position.set(0, -8, 0);
     world.add(groundBody);
 
     // Create two materials: one for top (with logo) and one for sides
@@ -307,27 +426,35 @@ async function createGround() {
     ];
 
     // Create geometry and mesh with multiple materials
-    const geometry = new THREE.BoxGeometry(50, 20, 50);
+    const geometry = new THREE.BoxGeometry(width * 2, height * 2, depth * 2);
     ground = new THREE.Mesh(geometry, materials);
     ground.position.copy(groundBody.position);
-    ground.receiveShadow = true;
+    ground.receiveShadow = false;
     scene.add(ground);
 }
 
 // Create a sphere based on transaction amount
 function createSphere(amount, txHash) {
-    // Scale the size based on amount (MIN_AMOUNT = smallest, 1000000 = largest)
-    // Using log scale for better distribution across wide range
+    // Scale the size based on amount (MIN_AMOUNT = smallest, MAX_AMOUNT = largest)
     const logMin = Math.log10(MIN_AMOUNT);
     const logMax = Math.log10(MAX_AMOUNT);
     const logAmount = Math.log10(Math.max(MIN_AMOUNT, Math.min(MAX_AMOUNT, amount)));
-    const normalizedSize = (logAmount - logMin) / (logMax - logMin); // 0 to 1
-    const size = 0.3 + (normalizedSize * 12); // Map to 0.3 to 12.2 units
     
-    // Physics sphere with mass proportional to size
+    // Get basic 0-1 normalization
+    const normalizedSize = (logAmount - logMin) / (logMax - logMin);
+    
+    // Apply cubic power to favor smaller sizes
+    // Higher power = more small spheres, fewer large ones
+    // Cube root of normalized value will give us volume-like scaling
+    const weightedSize = Math.pow(normalizedSize, 3);
+    
+    // Map to final size range (0.4 to 12.4)
+    const size = 0.4 + (weightedSize * 12);
+    
+    // Rest of the createSphere function remains the same...
     const sphereShape = new CANNON.Sphere(size);
     const sphereBody = new CANNON.Body({
-        mass: Math.pow(size, 3), // Mass increases with volume
+        mass: Math.pow(size, 4), // Mass increases with volume
         shape: sphereShape,
         material: new CANNON.Material()
     });
@@ -392,7 +519,7 @@ function createSphere(amount, txHash) {
     sphereData.push({ hash: txHash, amount: amount });
 
     // Clean up old spheres if too many
-    if (spheres.length > 1000) {
+    if (spheres.length > MAX_SPHERES) {
         const oldSphere = spheres.shift();
         const oldBody = sphereBodies.shift();
         sphereData.shift(); // Remove corresponding transaction data
@@ -458,19 +585,41 @@ function processTransaction(txData) {
     sonic_sent += txData.amount;
     createSphere(txData.amount, txData.hash);
     
-    // Update UI
-    document.getElementById("current-tx").innerHTML = 
-        `Total Sent: ${sonic_sent.toFixed(4)}`;
-    document.getElementById("current-queue").innerHTML = 
-        `Balls: ${spheres.length}`;
+    // Record transaction time
+    transactionTimes.push(Date.now());
+    
+    // Update 3D display
+    if (window.updateStatsDisplay) {
+        window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS());
+    }
 }
 
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
     
-    // Step physics world
-    world.step(1 / 60);
+    // Calculate current tilt
+    const tiltAngle = calculateTilt(spheres.length);
+    
+    // Update ground rotation
+    if (ground && ground.position.y !== undefined) {
+        // Adjust the rotation point to be at the surface center
+        const heightOffset = 2; // Half of the ground's height
+        
+        // Move ground up by height, rotate, then move back down
+        ground.position.y = groundBody.position.y + heightOffset;
+        ground.rotation.x = tiltAngle;
+        ground.position.z = -Math.sin(tiltAngle) * heightOffset;
+        ground.position.y -= Math.cos(tiltAngle) * heightOffset;
+        
+        // Update physics body rotation
+        groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), tiltAngle);
+    }
+    
+    // Step physics world (lower for better performance)
+    world.step(1 / 50);
+    // Simulation complexity (lower for better performance)
+    world.solver.iterations = 5;
     
     // Update sphere positions
     for (let i = 0; i < spheres.length; i++) {
@@ -480,8 +629,7 @@ function animate() {
     
     // Remove spheres that have fallen below a certain point
     for (let i = spheres.length - 1; i >= 0; i--) {
-        if (spheres[i].position.y < -50) {
-            // Dispose of geometries and materials to prevent memory leaks
+        if (spheres[i].position.y < -70) {
             spheres[i].geometry.dispose();
             spheres[i].material.dispose();
             scene.remove(spheres[i]);
