@@ -1,3 +1,3 @@
-# sonic-balls
+# sonic-drops
 
-Physical real-time simulation of the Sonic network
+Physical real-time simulation of the Sonic network transactions
