@@ -23,12 +23,14 @@ const MIN_SPHERE_SIZE = 0.4;
 const MAX_SPHERE_SIZE = 12;
 const MIN_SPHERE_SEGMENTS = 10; // Resolution
 const MAX_SPHERE_SEGMENTS = 40; // Resolution
+const BOUNCE_RESTITUTION = 0.5;
 
 // Ground settings
 const TILT_START = MAX_SPHERES / 2;  // Start tilting at half max
 const MAX_TILT = Math.PI / 90;      // 2 degree in radians max tilt
 
 // Environment settings
+const STEP_SIZE = 1 / 40;
 const AMBIENT_INTENSITY = 0.4;
 const DIRECTIONAL_INTENSITY = 1;
 
@@ -408,7 +410,8 @@ async function init() {
 
   // Initialize physics world
   world = new CANNON.World();
-  world.gravity.set(0, -7.82, 0);
+  // Less than normal 9.81 to compensate for smaller world.step
+  world.gravity.set(0, -6, 0);
 
   // Create ground
   await createGround();
@@ -469,7 +472,9 @@ async function createGround() {
   groundBody = new CANNON.Body({ // global var for reference
     mass: 0,
     shape: groundShape,
-    material: new CANNON.Material()
+    material: new CANNON.Material({
+      restitution: BOUNCE_RESTITUTION,
+    })
   });
   groundBody.position.set(0, -8, 0);
   world.add(groundBody);
@@ -529,11 +534,17 @@ function createSphere(amount, txHash) {
   const size = MIN_SPHERE_SIZE + (weightedSize * MAX_SPHERE_SIZE);
   
   // Rest of the createSphere function remains the same...
+  // Dynamically less bouncy for large spheres
+  const restitution = (Math.log10(size) - Math.log10(MIN_SPHERE_SIZE)) / (Math.log10(MAX_SPHERE_SIZE) - Math.log10(MIN_SPHERE_SIZE));
+  const dynamicRestitution = BOUNCE_RESTITUTION * (1 - restitution);
+
   const sphereShape = new CANNON.Sphere(size);
   const sphereBody = new CANNON.Body({
     mass: Math.pow(size, 4), // Mass increases with volume
     shape: sphereShape,
-    material: new CANNON.Material()
+    material: new CANNON.Material({
+      restitution: dynamicRestitution,
+    })
   });
   
   // Random position above the scene with more height variation
@@ -696,7 +707,7 @@ function animate() {
   }
   
   // Step physics world (lower for better performance)
-  world.step(1 / 50);
+  world.step(STEP_SIZE);
   // Simulation complexity (lower for better performance)
   world.solver.iterations = 5;
   
