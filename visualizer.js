@@ -23,14 +23,15 @@ const MIN_SPHERE_SIZE = 0.4;
 const MAX_SPHERE_SIZE = 12;
 const MIN_SPHERE_SEGMENTS = 10; // Resolution
 const MAX_SPHERE_SEGMENTS = 40; // Resolution
-const BOUNCE_RESTITUTION = 0.5;
+const BOUNCE_RESTITUTION = 0.6;
 
 // Ground settings
 const TILT_START = MAX_SPHERES / 2;  // Start tilting at half max
 const MAX_TILT = Math.PI / 90;      // 2 degree in radians max tilt
 
 // Environment settings
-const STEP_SIZE = 1 / 40;
+const STEP_SIZE = 1 / 40; // default 1/60
+const GRAVITY = 9;
 const AMBIENT_INTENSITY = 0.4;
 const DIRECTIONAL_INTENSITY = 1;
 
@@ -410,8 +411,7 @@ async function init() {
 
   // Initialize physics world
   world = new CANNON.World();
-  // Less than normal 9.81 to compensate for smaller world.step
-  world.gravity.set(0, -6, 0);
+  world.gravity.set(0, -GRAVITY, 0);
 
   // Create ground
   await createGround();
