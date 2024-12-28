@@ -2,13 +2,15 @@
 let scene, camera, renderer, world;
 let spheres = [], sphereBodies = [];
 let sphereData = [];
-let lastProcessedBlockNumber = 0;
 let sonic_sent = 0;
+let selectedSphereGlobal = null;
 let ground;
 let room;
 let hoveredSphere = null;
 let transactionTimes = [];
 let groundBody;
+const processedBlockHashes = new Set();
+let pendingRequest = null;
 
 // TX settings
 const RPC_URL = "https://rpc.soniclabs.com";
@@ -36,9 +38,9 @@ const MAX_TIME_STEP = 1 / 20;
 // down force
 const GRAVITY = 9;
 // ambient light
-const AMBIENT_INTENSITY = 0.4;
+const AMBIENT_INTENSITY = 0.5;
 // directional light
-const DIRECTIONAL_INTENSITY = 1;
+const DIRECTIONAL_INTENSITY = 1.2;
 
 // Set up tooltip
 const tooltipDiv = document.createElement('div');
@@ -69,19 +71,27 @@ function setupMouseHandlers() {
   });
 }
 
-// Replace your existing onSphereClick with this updated version
+// Show transaction details on click on the panel
 function onSphereClick(event) {
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
   raycaster.setFromCamera(mouse, camera);
-  const intersects = raycaster.intersectObjects(spheres, false);
+  const intersects = raycaster.intersectObjects([...spheres, window.statsHitPlane]);
 
   if (intersects.length > 0) {
-    const clickedSphere = intersects[0].object;
-    const sphereIndex = spheres.indexOf(clickedSphere);
-    if (sphereIndex !== -1 && sphereData[sphereIndex]) {
-      window.open(`${BLOCK_EXPLORER}/${sphereData[sphereIndex].hash}`, '_blank');
+    const hit = intersects[0].object;
+    
+    if (hit === window.statsHitPlane && selectedSphereGlobal) {
+      navigateToTransaction(selectedSphereGlobal);
+    } else if (spheres.includes(hit)) {
+      const sphereIndex = spheres.indexOf(hit);
+      if (sphereIndex !== -1 && sphereData[sphereIndex]) {
+        selectedSphere = sphereData[sphereIndex];
+        if (window.updateStatsDisplay) {
+          window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphere);
+        }
+      }
     }
   }
 }
@@ -92,26 +102,50 @@ function onMouseMove(event) {
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
   raycaster.setFromCamera(mouse, camera);
-  const intersects = raycaster.intersectObjects(spheres, false);
-
+  
+  const intersects = raycaster.intersectObjects([...spheres, window.statsHitPlane]);
   const canvas = renderer.domElement;
   
   if (intersects.length > 0) {
-    const intersectedSphere = intersects[0].object;
-    const sphereIndex = spheres.indexOf(intersectedSphere);
+    const hit = intersects[0].object;
     
-    if (sphereIndex !== -1 && sphereData[sphereIndex]) {
+    if (hit === window.statsHitPlane && selectedSphereGlobal) {
       canvas.style.cursor = 'pointer';
-      hoveredSphere = intersectedSphere;
+      if (!window.isStatsHovered) {
+        window.isStatsHovered = true;
+        // Update display to show hover state
+        if (window.updateStatsDisplay) {
+          window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
+        }
+      }
+    } else if (spheres.includes(hit)) {
+      if (window.isStatsHovered) {
+        window.isStatsHovered = false;
+        // Update display to remove hover state
+        if (window.updateStatsDisplay) {
+          window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
+        }
+      }
+      canvas.style.cursor = 'pointer';
+      hoveredSphere = hit;
       
-      // Update tooltip content and position
-      const amount = sphereData[sphereIndex].amount;
-      tooltipDiv.textContent = `${amount.toFixed(6).replace(/\.?0+$/, '')} S`;
-      tooltipDiv.style.display = 'block';
-      tooltipDiv.style.left = `${event.clientX + 15}px`;
-      tooltipDiv.style.top = `${event.clientY + 15}px`;
+      const sphereIndex = spheres.indexOf(hit);
+      if (sphereIndex !== -1 && sphereData[sphereIndex]) {
+        const amount = sphereData[sphereIndex].amount;
+        tooltipDiv.textContent = `${amount.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: amount > 1 ? 0 : 8})} S`;
+        tooltipDiv.style.display = 'block';
+        tooltipDiv.style.left = `${event.clientX + 15}px`;
+        tooltipDiv.style.top = `${event.clientY + 15}px`;
+      }
     }
   } else {
+    if (window.isStatsHovered) {
+      window.isStatsHovered = false;
+      // Update display to remove hover state
+      if (window.updateStatsDisplay) {
+        window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
+      }
+    }
     canvas.style.cursor = 'default';
     hoveredSphere = null;
     tooltipDiv.style.display = 'none';
@@ -202,25 +236,10 @@ function calculateTPS() {
   return (transactionTimes.length / 30).toFixed(2);
 }
 
-function onSphereClick(event) {
-  // Calculate mouse position in normalized device coordinates
-  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-  // Update the picking ray with the camera and mouse position
-  raycaster.setFromCamera(mouse, camera);
-
-  // Calculate objects intersecting the picking ray
-  const intersects = raycaster.intersectObjects(spheres, false);  // Add false parameter here
-
-  if (intersects.length > 0) {
-    const clickedSphere = intersects[0].object;
-    const sphereIndex = spheres.indexOf(clickedSphere);
-    if (sphereIndex !== -1 && sphereData[sphereIndex]) {
-      console.log('Opening transaction:', sphereData[sphereIndex].hash); // Add this for debugging
-      window.open(`${BLOCK_EXPLORER}/${sphereData[sphereIndex].hash}`, '_blank');
-    }
-  }
+// Navigate to transaction
+function navigateToTransaction(sphere) {
+  console.log("Navigating to transaction:", sphere.hash);
+  window.open(`${BLOCK_EXPLORER}/${sphere.hash}`, '_blank');
 }
 
 // Stats display texture
@@ -230,10 +249,25 @@ function createStatsTexture() {
   canvas.height = 250;
   const ctx = canvas.getContext('2d');
   
-  function updateTexture(totalSent, ballCount, tps) {
+  // Create hit test plane for the link
+  const hitTestGeometry = new THREE.PlaneGeometry(1, 1);
+  const hitTestMaterial = new THREE.MeshBasicMaterial({ 
+    transparent: true,
+    opacity: 0,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false
+  });
+  const hitTestPlane = new THREE.Mesh(hitTestGeometry, hitTestMaterial);
+  scene.add(hitTestPlane);
+  window.statsHitPlane = hitTestPlane;
+  window.isStatsHovered = false;
+  
+  function updateTexture(totalSent, ballCount, tps, selectedSphere) {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Create gradient background for the "screen"
+    
+    // Create gradient background
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     gradient.addColorStop(0, 'rgba(86, 54, 57, 1)');
     gradient.addColorStop(1, 'rgba(51, 35, 50, 1)');
@@ -242,14 +276,14 @@ function createStatsTexture() {
     const borderWidth = 5;
      
     // Draw rounded rectangle with border
-    const rx = 20; // border radius
+    const rx = 20;
     const ry = 20;
     const width = canvas.width - 40;
     const height = canvas.height - 40;
-    const x = 27; // position
+    const x = 27;
     const y = 12;
      
-    // Draw the border (slightly larger path)
+    // Draw the border
     ctx.beginPath();
     ctx.moveTo(x + rx, y);
     ctx.lineTo(x + width - rx, y);
@@ -267,22 +301,62 @@ function createStatsTexture() {
     // Fill the background
     ctx.fillStyle = gradient;
     ctx.fill();
-    
+   
     // Set text properties
-    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
     ctx.font = '32px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+   
+    // Draw first three lines in white
+    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+    ctx.fillText(`Volume: ${totalSent.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 4})} S`, canvas.width/2, canvas.height/5 - canvas.height/30);
+    ctx.fillText(`TPS: ${tps}`, canvas.width/2, canvas.height * 2/5 - canvas.height/30);
+    ctx.fillText(`Balls: ${ballCount}`, canvas.width/2, canvas.height * 3/5 - canvas.height/30);
     
-    // Draw text in three lines
-    ctx.fillText(`Volume: ${totalSent.toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 4})} S`, canvas.width/2, canvas.height/4);
-    ctx.fillText(`TPS: ${tps}`, canvas.width/2, canvas.height/2.1);
-    ctx.fillText(`Balls: ${ballCount}`, canvas.width/2, canvas.height * 3/4.3);
+    // Handle selected sphere text
+    if (selectedSphere) {
+      const prefix = 'TX: ';
+      const amount = `${selectedSphere.amount.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: selectedSphere.amount > 1 ? 0 : 8})} S`;
+      
+      // Measure text widths for centering
+      ctx.textAlign = 'left';
+      const totalWidth = ctx.measureText(prefix + amount).width;
+      const prefixWidth = ctx.measureText(prefix).width;
+      
+      // Calculate positions
+      const y = canvas.height * 4/5 - canvas.height/30;
+      const startX = (canvas.width - totalWidth) / 2;
+      const amountX = startX + prefixWidth;
+      
+      // Draw prefix in white
+      ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+      ctx.fillText(prefix, startX, y);
+      
+      // Draw amount in blue (brighter when hovering)
+      ctx.fillStyle = window.isStatsHovered ? '#66d9ff' : '#4A9EFF';
+      ctx.fillText(amount, amountX, y);
+
+      // Update hit test plane position and size to match the amount text
+      const worldX = ((amountX - canvas.width/2) / canvas.width) * 40 * 2.05;
+      const worldY = ((canvas.height/2 - y) / canvas.height) * 20 * 2.05;
+      const panelWidth = 82;
+      const worldHeight = (40 / canvas.height) * 20 * 2.05; // Height for clickable area
+
+      hitTestPlane.position.set(0, worldY + 22.5, -223.8); // Centered
+      hitTestPlane.scale.set(panelWidth - 8, worldHeight, 1); // Full width with padding
+    } else {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+      ctx.fillText('TX: Click a ball', canvas.width/2, canvas.height * 4/5 - canvas.height/30);
+      
+      // Hide hit test plane when no sphere is selected
+      hitTestPlane.scale.set(0, 0, 0);
+    }
     
     return new THREE.CanvasTexture(canvas);
   }
   
-  const texture = updateTexture(0, 0, '0.00');
+  const texture = updateTexture(0, 0, '0.00', null);
   texture.update = updateTexture;
   return texture;
 }
@@ -307,8 +381,9 @@ function createStatsDisplay() {
   scene.add(statsPlane);
 
   // Store reference to update the display - Added tps parameter here
-  window.updateStatsDisplay = (totalSent, ballCount, tps) => {
-    material.map = statsTexture.update(totalSent, ballCount, tps);
+  window.updateStatsDisplay = (totalSent, ballCount, tps, selectedSphere) => {
+    selectedSphereGlobal = selectedSphere;
+    material.map = statsTexture.update(totalSent, ballCount, tps, selectedSphere);
     material.map.needsUpdate = true;
   };
 }
@@ -647,10 +722,40 @@ function createSphere(amount, txHash) {
 }
 
 // RPC Functions
-async function getLatestBlockAndTransactions() {
+async function fetchRPC(method, params) {
+  const response = await fetch(RPC_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: Date.now(),
+      method,
+      params
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (data.error) {
+    throw new Error(`RPC error: ${data.error.message}`);
+  }
+
+  return data.result;
+}
+
+async function getLatestBlocksAndTransactions() {
+  if (pendingRequest) {
+    return null;
+  }
+  
   try {
-    // Get latest block number
-    const latestBlockResponse = await fetch(RPC_URL, {
+    pendingRequest = true;
+    
+    // First get block number
+    const response = await fetch(RPC_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -660,41 +765,114 @@ async function getLatestBlockAndTransactions() {
         params: []
       })
     });
-    const latestBlockData = await latestBlockResponse.json();
-    const latestBlockNumber = parseInt(latestBlockData.result, 16);
 
-    if (latestBlockNumber <= lastProcessedBlockNumber) {
-      return null;
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    // Get block details
-    const blockResponse = await fetch(RPC_URL, {
+    const { result: blockNumberHex } = await response.json();
+    const latestBlockNumber = parseInt(blockNumberHex, 16);
+    
+    // Get all three blocks in one batch call
+    // To make sure we don't miss any blocks
+    const blocksResponse = await fetch(RPC_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 2,
-        method: 'eth_getBlockByNumber',
-        params: [
-          `0x${latestBlockNumber.toString(16)}`,
-          true
-        ]
-      })
+      body: JSON.stringify([
+        {
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'eth_getBlockByNumber',
+          params: [`0x${(latestBlockNumber - 3).toString(16)}`, true]
+        },
+        {
+          jsonrpc: '2.0',
+          id: 3,
+          method: 'eth_getBlockByNumber',
+          params: [`0x${(latestBlockNumber - 2).toString(16)}`, true]
+        },
+        {
+          jsonrpc: '2.0',
+          id: 4,
+          method: 'eth_getBlockByNumber',
+          params: [`0x${(latestBlockNumber - 1).toString(16)}`, true]
+        },
+        {
+          jsonrpc: '2.0',
+          id: 5,
+          method: 'eth_getBlockByNumber',
+          params: [`0x${latestBlockNumber.toString(16)}`, true]
+        }
+      ])
     });
-    const blockData = await blockResponse.json();
-    const transactions = blockData.result?.transactions;
 
-    lastProcessedBlockNumber = latestBlockNumber;
+    if (!blocksResponse.ok) {
+      throw new Error(`HTTP error! status: ${blocksResponse.status}`);
+    }
 
-    return transactions?.map(tx => ({
-      hash: tx.hash,
-      amount: parseInt(tx.value, 16) / 1e18,
-      subtype: tx.to ? 'send' : 'contract_creation'
-    }));
+    const blocksData = await blocksResponse.json();
+    
+    // Process all blocks from the batch response
+    const newTransactions = [];
+    
+    for (const result of blocksData) {
+      const block = result.result;
+      if (!block) continue;
+
+      // Skip if we've already processed this block
+      if (processedBlockHashes.has(block.hash)) {
+        continue;
+      }
+
+      // console.info(parseInt(block.number, 16));
+      processedBlockHashes.add(block.hash);
+
+      // Keep set size manageable
+      if (processedBlockHashes.size > 50) {
+        const oldestHash = processedBlockHashes.values().next().value;
+        processedBlockHashes.delete(oldestHash);
+      }
+
+      // Add transactions from this block
+      if (block.transactions?.length > 0) {
+        newTransactions.push(...block.transactions.map(tx => ({
+          hash: tx.hash,
+          amount: parseInt(tx.value, 16) / 1e18,
+          subtype: tx.to ? 'send' : 'contract_creation',
+          blockHash: block.hash,
+          blockNumber: parseInt(block.number, 16)
+        })));
+      }
+    }
+
+    return newTransactions.length > 0 ? newTransactions : null;
+
   } catch (error) {
-    console.error('Error fetching data:', error);
+    console.error('Error fetching blockchain data:', error);
     return null;
+  } finally {
+    pendingRequest = null;
   }
+}
+
+function pollForNewBlocks() {
+  let isPolling = true;
+
+  async function poll() {
+    if (!isPolling) return;
+
+    const transactions = await getLatestBlocksAndTransactions();
+    if (transactions) {
+      transactions.forEach(processTransaction);
+    }
+
+    setTimeout(poll, 600);
+  }
+
+  poll();
+  return () => {
+    isPolling = false;
+  };
 }
 
 function processTransaction(txData) {
@@ -711,7 +889,7 @@ function processTransaction(txData) {
   
   // Update 3D display
   if (window.updateStatsDisplay) {
-    window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS());
+    window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
   }
 }
 
@@ -782,16 +960,6 @@ function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-// Poll for new blocks
-function pollForNewBlocks() {
-  setInterval(async () => {
-    const transactions = await getLatestBlockAndTransactions();
-    if (transactions) {
-      transactions.forEach(processTransaction);
-    }
-  }, 400);
 }
 
 // Initialize everything
