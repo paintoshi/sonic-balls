@@ -23,16 +23,21 @@ const MIN_SPHERE_SIZE = 0.4;
 const MAX_SPHERE_SIZE = 12;
 const MIN_SPHERE_SEGMENTS = 10; // Resolution
 const MAX_SPHERE_SEGMENTS = 40; // Resolution
-const BOUNCE_RESTITUTION = 0.6;
+const BOUNCE_RESTITUTION = 0.5;
 
 // Ground settings
 const TILT_START = MAX_SPHERES / 2;  // Start tilting at half max
 const MAX_TILT = Math.PI / 90;      // 2 degree in radians max tilt
 
 // Environment settings
-const STEP_SIZE = 1 / 40; // default 1/60
+ // target fps (higher = more cpu)
+const TIME_STEP = 1 / 40;
+const MAX_TIME_STEP = 1 / 20;
+// down force
 const GRAVITY = 9;
+// ambient light
 const AMBIENT_INTENSITY = 0.4;
+// directional light
 const DIRECTIONAL_INTENSITY = 1;
 
 // Set up tooltip
@@ -412,6 +417,7 @@ async function init() {
   // Initialize physics world
   world = new CANNON.World();
   world.gravity.set(0, -GRAVITY, 0);
+  // world.allowSleep = true;
 
   // Create ground
   await createGround();
@@ -476,6 +482,26 @@ async function createGround() {
       restitution: BOUNCE_RESTITUTION,
     })
   });
+
+  /**
+  // Configure ground for better collision handling
+  groundBody.collisionResponse = true;
+  
+  // Add contact material between spheres and ground
+  const groundMaterial = new CANNON.Material();
+  const sphereMaterial = new CANNON.Material();
+  
+  const contactMaterial = new CANNON.ContactMaterial(groundMaterial, sphereMaterial, {
+    friction: 0.3,
+    restitution: BOUNCE_RESTITUTION,
+    contactEquationStiffness: 1e8,    // Increase stiffness for better collision response
+    contactEquationRelaxation: 3,     // Relaxation for stability
+  });
+  
+  world.addContactMaterial(contactMaterial);
+  groundBody.material = groundMaterial;
+  */
+  
   groundBody.position.set(0, -8, 0);
   world.add(groundBody);
 
@@ -540,11 +566,16 @@ function createSphere(amount, txHash) {
 
   const sphereShape = new CANNON.Sphere(size);
   const sphereBody = new CANNON.Body({
-    mass: Math.pow(size, 4), // Mass increases with volume
+    mass: Math.pow(size, 3), // sphere volume
     shape: sphereShape,
     material: new CANNON.Material({
       restitution: dynamicRestitution,
-    })
+    }),
+    // linearDamping: 0.01,      // Add slight damping to prevent endless bouncing
+    // allowSleep: true,         // Allow bodies to sleep when static
+    // collisionResponse: true,  // Ensure collisions are processed
+    // sleepSpeedLimit: 5,   // Bodies sleep when moving slower than this
+    // sleepTimeLimit: 1.0,      // Bodies must be still for this long before sleeping
   });
   
   // Random position above the scene with more height variation
@@ -684,9 +715,15 @@ function processTransaction(txData) {
   }
 }
 
-// Animation loop
+let lastTime = performance.now();
+
 function animate() {
   requestAnimationFrame(animate);
+  
+  // Calculate delta time
+  const currentTime = performance.now();
+  let deltaTime = currentTime - lastTime;
+  lastTime = currentTime;
   
   // Calculate current tilt
   const tiltAngle = calculateTilt(spheres.length);
@@ -706,8 +743,15 @@ function animate() {
     groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), tiltAngle);
   }
   
-  // Step physics world (lower for better performance)
-  world.step(STEP_SIZE);
+  /**
+  world.defaultContactMaterial.contactEquationStiffness = 1e8;
+  world.defaultContactMaterial.contactEquationRelaxation = 3;
+  */
+  
+  // Step physics simulation
+  // world.step(FIXED_TIME_STEP, deltaTime, MAX_SUB_STEPS);
+  // Lower step size on lower frame rates (120 animates/s will be TIME_STEP)
+  world.step(Math.min(TIME_STEP * (deltaTime / 7), MAX_TIME_STEP));
   // Simulation complexity (lower for better performance)
   world.solver.iterations = 5;
   
