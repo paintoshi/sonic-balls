@@ -92,10 +92,19 @@ function onSphereClick(event, canvas) {
   
   raycaster.setFromCamera(mouse, camera);
   const intersects = raycaster.intersectObjects([...spheres, window.statsHitPlane]);
+  const hit = intersects?.[0]?.object;
+
+  // Reset previous selected sphere color if exists
+  if (selectedSphereGlobal && selectedSphereGlobal.sphere && hit !== window.statsHitPlane) {
+    const oldSphere = selectedSphereGlobal.sphere;
+    oldSphere.material.emissive.setHex(0x000000);
+    oldSphere.material.color.setHex(selectedSphereGlobal.originalColor);
+    if (window.updateStatsDisplay) {
+      window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), null);
+    }
+  }
   
   if (intersects.length > 0) {
-    const hit = intersects[0].object;
-    
     if (hit === window.statsHitPlane && selectedSphereGlobal) {
       navigateToTransaction(selectedSphereGlobal);
     } else if (spheres.includes(hit)) {
@@ -117,14 +126,6 @@ function onSphereClick(event, canvas) {
           window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphere);
         }
       }
-    }
-  } else if (selectedSphereGlobal && selectedSphereGlobal.sphere) {
-    // Reset previous selected sphere color if exists
-    const oldSphere = selectedSphereGlobal.sphere;
-    oldSphere.material.emissive.setHex(0x000000);
-    oldSphere.material.color.setHex(selectedSphereGlobal.originalColor);
-    if (window.updateStatsDisplay) {
-      window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), null);
     }
   }
 }
