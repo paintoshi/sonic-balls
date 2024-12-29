@@ -22,7 +22,7 @@ const TPS_WINDOW = 30000; // 30 seconds
 // Sphere settings
 const MAX_SPHERES = 1000; // Before FIFO
 const MIN_SPHERE_SIZE = 0.4;
-const MAX_SPHERE_SIZE = 12;
+const MAX_SPHERE_SIZE = 10;
 const MIN_SPHERE_SEGMENTS = 10; // Resolution
 const MAX_SPHERE_SEGMENTS = 40; // Resolution
 const BOUNCE_RESTITUTION = 0.5;
@@ -93,21 +93,18 @@ function onSphereClick(event, canvas) {
   raycaster.setFromCamera(mouse, camera);
   const intersects = raycaster.intersectObjects([...spheres, window.statsHitPlane]);
   const hit = intersects?.[0]?.object;
-
-  // Reset previous selected sphere color if exists
-  if (selectedSphereGlobal && selectedSphereGlobal.sphere && hit !== window.statsHitPlane) {
-    const oldSphere = selectedSphereGlobal.sphere;
-    oldSphere.material.emissive.setHex(0x000000);
-    oldSphere.material.color.setHex(selectedSphereGlobal.originalColor);
-    if (window.updateStatsDisplay) {
-      window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), null);
-    }
-  }
   
   if (intersects.length > 0) {
     if (hit === window.statsHitPlane && selectedSphereGlobal) {
       navigateToTransaction(selectedSphereGlobal);
     } else if (spheres.includes(hit)) {
+      // Reset previous selected sphere color if exists
+      if (selectedSphereGlobal && selectedSphereGlobal.sphere) {
+        const oldSphere = selectedSphereGlobal.sphere;
+        oldSphere.material.emissive.setHex(0x000000);
+        oldSphere.material.color.setHex(selectedSphereGlobal.originalColor);
+      }
+      
       const sphereIndex = spheres.indexOf(hit);
       if (sphereIndex !== -1 && sphereData[sphereIndex]) {
         // Store the original color and sphere reference
@@ -182,6 +179,28 @@ function onMouseMove(event) {
   }
 }
 
+async function drawExternalLinkIcon(ctx, x, y, size) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const iconCtx = canvas.getContext('2d');
+  
+  // Load and draw SVG
+  const img = new Image();
+  const blob = new Blob([document.querySelector('#external-link').outerHTML], {type: 'image/svg+xml'});
+  const url = URL.createObjectURL(blob);
+  
+  return new Promise((resolve) => {
+    img.onload = () => {
+      iconCtx.drawImage(img, 0, 0, size, size);
+      ctx.drawImage(canvas, x - size/2, y - size/2, size, size);
+      URL.revokeObjectURL(url);
+      resolve();
+    };
+    img.src = url;
+  });
+}
+
 // Add raycaster for click detection
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -239,7 +258,7 @@ function createRoomEnvironment() {
   });
 
   const room = new THREE.Mesh(roomGeometry, roomMaterial);
-  room.position.set(0, -80, -100);
+  room.position.set(0.4, -80, -100);
   scene.add(room);
 
   // Create environment map texture
@@ -325,10 +344,11 @@ function createMainStatsTexture() {
    
     // Draw stats in white
     ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+    const xAdjustment = 6;
     const yAdjustment = canvas.height / 35;
-    ctx.fillText(`Volume: ${totalSent.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 4})} S`, canvas.width/2, canvas.height/4 - yAdjustment);
-    ctx.fillText(`TPS: ${tps}`, canvas.width/2, canvas.height/2 - yAdjustment);
-    ctx.fillText(`Balls: ${ballCount}`, canvas.width/2, canvas.height * 3/4 - yAdjustment);
+    ctx.fillText(`Volume: ${totalSent.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 4})} S`, canvas.width/2 + xAdjustment, canvas.height/4 - yAdjustment);
+    ctx.fillText(`TPS: ${tps}`, canvas.width/2 + xAdjustment, canvas.height/2 - yAdjustment);
+    ctx.fillText(`Balls: ${ballCount}`, canvas.width/2 + xAdjustment, canvas.height * 3/4 - yAdjustment);
     
     return new THREE.CanvasTexture(canvas);
   }
@@ -338,7 +358,6 @@ function createMainStatsTexture() {
   return texture;
 }
 
-// Stats display texture creation for selected transaction panel
 function createSelectedTxTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 250;
@@ -358,19 +377,32 @@ function createSelectedTxTexture() {
   scene.add(hitTestPlane);
   window.statsHitPlane = hitTestPlane;
   window.isStatsHovered = false;
+
+  // Create base texture
+  const texture = new THREE.CanvasTexture(canvas);
   
+  // Pre-load the icon to avoid loading it on every update
+  const iconImage = new Image();
+  const iconBlob = new Blob([document.querySelector('#external-link').outerHTML], {type: 'image/svg+xml'});
+  const iconUrl = URL.createObjectURL(iconBlob);
+  
+  // Wait for icon to load before first render
+  iconImage.onload = () => {
+    URL.revokeObjectURL(iconUrl);
+  };
+  iconImage.src = iconUrl;
+
+  // Update function
   function updateTexture(selectedSphere) {
-    // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Create gradient background
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     gradient.addColorStop(0, 'rgba(61, 42, 52, 1)');
     gradient.addColorStop(1, 'rgba(45, 31, 44, 1)');
-     
+    
     const borderColor = 'rgb(7, 12, 33)';
     const borderWidth = 5;
-     
+    
     // Draw rounded rectangle with border
     const rx = 20;
     const ry = 20;
@@ -378,8 +410,7 @@ function createSelectedTxTexture() {
     const height = canvas.height - 40;
     const x = 27;
     const y = 12;
-     
-    // Draw the border
+    
     ctx.beginPath();
     ctx.moveTo(x + rx, y);
     ctx.lineTo(x + width - rx, y);
@@ -393,47 +424,48 @@ function createSelectedTxTexture() {
     ctx.lineWidth = borderWidth;
     ctx.strokeStyle = borderColor;
     ctx.stroke();
-     
-    // Fill the background
+    
     ctx.fillStyle = gradient;
     ctx.fill();
-   
-    // Draw header text
+    
     ctx.font = '32px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-    ctx.fillText('Selected', canvas.width/2, canvas.height/3);
+    const xAdjustment = 6;
+    ctx.fillText('Selected', canvas.width/2 + xAdjustment, canvas.height/3);
     
     if (selectedSphere) {
-      // Draw amount with smaller font
       const amount = `${selectedSphere.amount.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: selectedSphere.amount > 1 ? 0 : 8})} S`;
       
       ctx.font = '24px Arial';
       ctx.fillStyle = window.isStatsHovered ? '#66d9ff' : '#4A9EFF';
-      ctx.fillText(amount, canvas.width/2, canvas.height * 2/3.4);
-
-      // Update hit test plane position and size
-      const worldY = -1.4; // Position Y
-      const panelWidth = 41; // Half of main panel width
-      const worldHeight = 5; // Height for clickable area
-
-      hitTestPlane.position.set(0, worldY, -223.8);
-      hitTestPlane.scale.set(panelWidth - 4, worldHeight, 1);
+      ctx.fillText(amount, canvas.width/2 + xAdjustment, canvas.height * 2/3.4);
+      
+      // Draw the pre-loaded icon
+      const iconSize = 24;
+      ctx.drawImage(iconImage, canvas.width - 30 - iconSize/2, 30 - iconSize/2, iconSize, iconSize);
+      
+      hitTestPlane.position.set(1.2, 0.8, -223.8);
+      hitTestPlane.scale.set(44, 17, 1);
     } else {
       ctx.font = '20px Arial';
       ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.fillText('Click a ball', canvas.width/2, canvas.height * 2/3.4);
+      ctx.fillText('Click a ball', canvas.width/2 + xAdjustment, canvas.height * 2/3.4);
       
-      // Hide hit test plane when no sphere is selected
       hitTestPlane.scale.set(0, 0, 0);
     }
     
-    return new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
   }
   
-  const texture = updateTexture(null);
+  // Initial update
+  updateTexture(null);
+  
+  // Add update method
   texture.update = updateTexture;
+  
   return texture;
 }
 
@@ -468,15 +500,19 @@ function createStatsDisplay() {
   });
 
   const selectedTxPlane = new THREE.Mesh(selectedGeometry, selectedMaterial);
-  selectedTxPlane.position.set(0, 0, -224); // Position below main panel
+  selectedTxPlane.position.set(0, -1, -224);
   selectedTxPlane.scale.set(2.05, 2.05, 2.05);
   scene.add(selectedTxPlane);
 
   // Store reference to update both displays
   window.updateStatsDisplay = (totalSent, ballCount, tps, selectedSphere) => {
     selectedSphereGlobal = selectedSphere;
+    
+    // Update both textures
     mainMaterial.map = mainStatsTexture.update(totalSent, ballCount, tps);
-    selectedMaterial.map = selectedTxTexture.update(selectedSphere);
+    selectedTxTexture.update(selectedSphere);
+    
+    // Mark both textures as needing update
     mainMaterial.map.needsUpdate = true;
     selectedMaterial.map.needsUpdate = true;
   };
