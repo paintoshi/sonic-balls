@@ -58,27 +58,39 @@ tooltipDiv.style.cssText = `
 `;
 document.body.appendChild(tooltipDiv);
 
+const isTouchDevice = () => {
+  return (('ontouchstart' in window) ||
+     (navigator.maxTouchPoints > 0) ||
+     (navigator.msMaxTouchPoints > 0));
+};
+
 // Add mousemove event listener
 function setupMouseHandlers() {
   const canvas = renderer.domElement;
-  canvas.addEventListener('click', onSphereClick);
-  canvas.addEventListener('mousemove', onMouseMove);
   
-  // Reset cursor when mouse leaves canvas
-  canvas.addEventListener('mouseleave', () => {
-    canvas.style.cursor = 'default';
-    tooltipDiv.style.display = 'none';
-  });
+  // Use pointerdown instead of click for better cross-device support
+  canvas.addEventListener('pointerdown', (event) => onSphereClick(event, canvas));
+  
+  // Only add hover effects for non-touch devices
+  if (!('ontouchstart' in window)) {
+    canvas.addEventListener('pointermove', onMouseMove);
+    canvas.addEventListener('mouseleave', () => {
+      canvas.style.cursor = 'default';
+      tooltipDiv.style.display = 'none';
+    });
+  }
 }
 
 // Show transaction details on click on the panel
-function onSphereClick(event) {
-  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
+function onSphereClick(event, canvas) {
+  // Get normalized coordinates
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  
   raycaster.setFromCamera(mouse, camera);
   const intersects = raycaster.intersectObjects([...spheres, window.statsHitPlane]);
-
+  
   if (intersects.length > 0) {
     const hit = intersects[0].object;
     
@@ -100,20 +112,18 @@ function onSphereClick(event) {
 function onMouseMove(event) {
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
   raycaster.setFromCamera(mouse, camera);
-  
+ 
   const intersects = raycaster.intersectObjects([...spheres, window.statsHitPlane]);
   const canvas = renderer.domElement;
-  
+ 
   if (intersects.length > 0) {
     const hit = intersects[0].object;
-    
+   
     if (hit === window.statsHitPlane && selectedSphereGlobal) {
       canvas.style.cursor = 'pointer';
       if (!window.isStatsHovered) {
         window.isStatsHovered = true;
-        // Update display to show hover state
         if (window.updateStatsDisplay) {
           window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
         }
@@ -121,14 +131,13 @@ function onMouseMove(event) {
     } else if (spheres.includes(hit)) {
       if (window.isStatsHovered) {
         window.isStatsHovered = false;
-        // Update display to remove hover state
         if (window.updateStatsDisplay) {
           window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
         }
       }
       canvas.style.cursor = 'pointer';
       hoveredSphere = hit;
-      
+     
       const sphereIndex = spheres.indexOf(hit);
       if (sphereIndex !== -1 && sphereData[sphereIndex]) {
         const amount = sphereData[sphereIndex].amount;
@@ -141,7 +150,6 @@ function onMouseMove(event) {
   } else {
     if (window.isStatsHovered) {
       window.isStatsHovered = false;
-      // Update display to remove hover state
       if (window.updateStatsDisplay) {
         window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
       }
@@ -337,7 +345,6 @@ function createStatsTexture() {
       ctx.fillText(amount, amountX, y);
 
       // Update hit test plane position and size to match the amount text
-      const worldX = ((amountX - canvas.width/2) / canvas.width) * 40 * 2.05;
       const worldY = ((canvas.height/2 - y) / canvas.height) * 20 * 2.05;
       const panelWidth = 82;
       const worldHeight = (40 / canvas.height) * 20 * 2.05; // Height for clickable area
@@ -773,8 +780,8 @@ async function getLatestBlocksAndTransactions() {
     const { result: blockNumberHex } = await response.json();
     const latestBlockNumber = parseInt(blockNumberHex, 16);
     
-    // Get all three blocks in one batch call
-    // To make sure we don't miss any blocks
+    // Get last 4 blocks in one batch call
+    // To make sure we don't miss any blocks when rpc is slow
     const blocksResponse = await fetch(RPC_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
