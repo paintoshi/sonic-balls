@@ -26,6 +26,8 @@ const MAX_SPHERE_SIZE = 12;
 const MIN_SPHERE_SEGMENTS = 10; // Resolution
 const MAX_SPHERE_SEGMENTS = 40; // Resolution
 const BOUNCE_RESTITUTION = 0.5;
+const SELECTED_COLOR = 0xb92c89; // Magenta
+const GLOW_INTENSITY = 0.2;
 
 // Ground settings
 const TILT_START = MAX_SPHERES / 2;  // Start tilting at half max
@@ -91,6 +93,16 @@ function onSphereClick(event, canvas) {
   raycaster.setFromCamera(mouse, camera);
   const intersects = raycaster.intersectObjects([...spheres, window.statsHitPlane]);
   
+  // Reset previous selected sphere color if exists
+  if (selectedSphereGlobal && selectedSphereGlobal.sphere) {
+    const oldSphere = selectedSphereGlobal.sphere;
+    oldSphere.material.emissive.setHex(0x000000);
+    oldSphere.material.color.setHex(selectedSphereGlobal.originalColor);
+    if (window.updateStatsDisplay) {
+      window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), null);
+    }
+  }
+  
   if (intersects.length > 0) {
     const hit = intersects[0].object;
     
@@ -99,7 +111,18 @@ function onSphereClick(event, canvas) {
     } else if (spheres.includes(hit)) {
       const sphereIndex = spheres.indexOf(hit);
       if (sphereIndex !== -1 && sphereData[sphereIndex]) {
-        selectedSphere = sphereData[sphereIndex];
+        // Store the original color and sphere reference
+        selectedSphere = {
+          ...sphereData[sphereIndex],
+          sphere: hit,
+          originalColor: hit.material.color.getHex()
+        };
+        
+        // Update sphere appearance
+        hit.material.color.setHex(SELECTED_COLOR);
+        hit.material.emissive.setHex(SELECTED_COLOR);
+        hit.material.emissiveIntensity = GLOW_INTENSITY;
+        
         if (window.updateStatsDisplay) {
           window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphere);
         }
@@ -251,33 +274,19 @@ function navigateToTransaction(sphere) {
 }
 
 // Stats display texture
-function createStatsTexture() {
+function createMainStatsTexture() {
   const canvas = document.createElement('canvas');
-  canvas.width = 500;
-  canvas.height = 250;
+  canvas.width = 520;
+  canvas.height = 200;
   const ctx = canvas.getContext('2d');
   
-  // Create hit test plane for the link
-  const hitTestGeometry = new THREE.PlaneGeometry(1, 1);
-  const hitTestMaterial = new THREE.MeshBasicMaterial({ 
-    transparent: true,
-    opacity: 0,
-    side: THREE.DoubleSide,
-    depthTest: false,
-    depthWrite: false
-  });
-  const hitTestPlane = new THREE.Mesh(hitTestGeometry, hitTestMaterial);
-  scene.add(hitTestPlane);
-  window.statsHitPlane = hitTestPlane;
-  window.isStatsHovered = false;
-  
-  function updateTexture(totalSent, ballCount, tps, selectedSphere) {
+  function updateTexture(totalSent, ballCount, tps) {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Create gradient background
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, 'rgba(86, 54, 57, 1)');
+    gradient.addColorStop(0, 'rgba(92, 61, 54, 1)');
     gradient.addColorStop(1, 'rgba(51, 35, 50, 1)');
      
     const borderColor = 'rgb(7, 12, 33)';
@@ -315,46 +324,107 @@ function createStatsTexture() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
    
-    // Draw first three lines in white
+    // Draw stats in white
     ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-    ctx.fillText(`Volume: ${totalSent.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 4})} S`, canvas.width/2, canvas.height/5 - canvas.height/30);
-    ctx.fillText(`TPS: ${tps}`, canvas.width/2, canvas.height * 2/5 - canvas.height/30);
-    ctx.fillText(`Balls: ${ballCount}`, canvas.width/2, canvas.height * 3/5 - canvas.height/30);
+    const yAdjustment = canvas.height / 35;
+    ctx.fillText(`Volume: ${totalSent.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 4})} S`, canvas.width/2, canvas.height/4 - yAdjustment);
+    ctx.fillText(`TPS: ${tps}`, canvas.width/2, canvas.height/2 - yAdjustment);
+    ctx.fillText(`Balls: ${ballCount}`, canvas.width/2, canvas.height * 3/4 - yAdjustment);
     
-    // Handle selected sphere text
+    return new THREE.CanvasTexture(canvas);
+  }
+  
+  const texture = updateTexture(0, 0, '0.00');
+  texture.update = updateTexture;
+  return texture;
+}
+
+// Stats display texture creation for selected transaction panel
+function createSelectedTxTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 250;
+  canvas.height = 120;
+  const ctx = canvas.getContext('2d');
+  
+  // Create hit test plane for the link
+  const hitTestGeometry = new THREE.PlaneGeometry(1, 1);
+  const hitTestMaterial = new THREE.MeshBasicMaterial({ 
+    transparent: true,
+    opacity: 0,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false
+  });
+  const hitTestPlane = new THREE.Mesh(hitTestGeometry, hitTestMaterial);
+  scene.add(hitTestPlane);
+  window.statsHitPlane = hitTestPlane;
+  window.isStatsHovered = false;
+  
+  function updateTexture(selectedSphere) {
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Create gradient background
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    gradient.addColorStop(0, 'rgba(61, 42, 52, 1)');
+    gradient.addColorStop(1, 'rgba(45, 31, 44, 1)');
+     
+    const borderColor = 'rgb(7, 12, 33)';
+    const borderWidth = 5;
+     
+    // Draw rounded rectangle with border
+    const rx = 20;
+    const ry = 20;
+    const width = canvas.width - 40;
+    const height = canvas.height - 40;
+    const x = 27;
+    const y = 12;
+     
+    // Draw the border
+    ctx.beginPath();
+    ctx.moveTo(x + rx, y);
+    ctx.lineTo(x + width - rx, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + ry);
+    ctx.lineTo(x + width, y + height - ry);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - rx, y + height);
+    ctx.lineTo(x + rx, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - ry);
+    ctx.lineTo(x, y + ry);
+    ctx.quadraticCurveTo(x, y, x + rx, y);
+    ctx.lineWidth = borderWidth;
+    ctx.strokeStyle = borderColor;
+    ctx.stroke();
+     
+    // Fill the background
+    ctx.fillStyle = gradient;
+    ctx.fill();
+   
+    // Draw header text
+    ctx.font = '32px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+    ctx.fillText('Selected', canvas.width/2, canvas.height/3);
+    
     if (selectedSphere) {
-      const prefix = 'TX: ';
+      // Draw amount with smaller font
       const amount = `${selectedSphere.amount.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: selectedSphere.amount > 1 ? 0 : 8})} S`;
       
-      // Measure text widths for centering
-      ctx.textAlign = 'left';
-      const totalWidth = ctx.measureText(prefix + amount).width;
-      const prefixWidth = ctx.measureText(prefix).width;
-      
-      // Calculate positions
-      const y = canvas.height * 4/5 - canvas.height/30;
-      const startX = (canvas.width - totalWidth) / 2;
-      const amountX = startX + prefixWidth;
-      
-      // Draw prefix in white
-      ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-      ctx.fillText(prefix, startX, y);
-      
-      // Draw amount in blue (brighter when hovering)
+      ctx.font = '24px Arial';
       ctx.fillStyle = window.isStatsHovered ? '#66d9ff' : '#4A9EFF';
-      ctx.fillText(amount, amountX, y);
+      ctx.fillText(amount, canvas.width/2, canvas.height * 2/3.4);
 
-      // Update hit test plane position and size to match the amount text
-      const worldY = ((canvas.height/2 - y) / canvas.height) * 20 * 2.05;
-      const panelWidth = 82;
-      const worldHeight = (40 / canvas.height) * 20 * 2.05; // Height for clickable area
+      // Update hit test plane position and size
+      const worldY = -1.4; // Position Y
+      const panelWidth = 41; // Half of main panel width
+      const worldHeight = 5; // Height for clickable area
 
-      hitTestPlane.position.set(0, worldY + 22.5, -223.8); // Centered
-      hitTestPlane.scale.set(panelWidth - 8, worldHeight, 1); // Full width with padding
+      hitTestPlane.position.set(0, worldY, -223.8);
+      hitTestPlane.scale.set(panelWidth - 4, worldHeight, 1);
     } else {
-      ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-      ctx.fillText('TX: Click a ball', canvas.width/2, canvas.height * 4/5 - canvas.height/30);
+      ctx.font = '20px Arial';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.fillText('Click a ball', canvas.width/2, canvas.height * 2/3.4);
       
       // Hide hit test plane when no sphere is selected
       hitTestPlane.scale.set(0, 0, 0);
@@ -363,35 +433,53 @@ function createStatsTexture() {
     return new THREE.CanvasTexture(canvas);
   }
   
-  const texture = updateTexture(0, 0, '0.00', null);
+  const texture = updateTexture(null);
   texture.update = updateTexture;
   return texture;
 }
 
 // Stats display
 function createStatsDisplay() {
-  const statsTexture = createStatsTexture();
+  const mainStatsTexture = createMainStatsTexture();
+  const selectedTxTexture = createSelectedTxTexture();
   
-  // Create a plane geometry for the display
-  const geometry = new THREE.PlaneGeometry(40, 20);
-  const material = new THREE.MeshStandardMaterial({
-    map: statsTexture,
+  // Create main stats panel
+  const mainGeometry = new THREE.PlaneGeometry(50, 20);
+  const mainMaterial = new THREE.MeshStandardMaterial({
+    map: mainStatsTexture,
     transparent: true,
     opacity: 0.9,
     metalness: 0.5,
     roughness: 0.5
   });
 
-  const statsPlane = new THREE.Mesh(geometry, material);
-  statsPlane.position.set(0, 22.5, -224); // Position on the front wall
-  statsPlane.scale.set(2.05,2.05,2.05);
-  scene.add(statsPlane);
+  const mainStatsPlane = new THREE.Mesh(mainGeometry, mainMaterial);
+  mainStatsPlane.position.set(0, 30, -224);
+  mainStatsPlane.scale.set(2.05, 2.05, 2.05);
+  scene.add(mainStatsPlane);
 
-  // Store reference to update the display - Added tps parameter here
+  // Create selected transaction panel
+  const selectedGeometry = new THREE.PlaneGeometry(25, 12);
+  const selectedMaterial = new THREE.MeshStandardMaterial({
+    map: selectedTxTexture,
+    transparent: true,
+    opacity: 0.9,
+    metalness: 0.5,
+    roughness: 0.5
+  });
+
+  const selectedTxPlane = new THREE.Mesh(selectedGeometry, selectedMaterial);
+  selectedTxPlane.position.set(0, 0, -224); // Position below main panel
+  selectedTxPlane.scale.set(2.05, 2.05, 2.05);
+  scene.add(selectedTxPlane);
+
+  // Store reference to update both displays
   window.updateStatsDisplay = (totalSent, ballCount, tps, selectedSphere) => {
     selectedSphereGlobal = selectedSphere;
-    material.map = statsTexture.update(totalSent, ballCount, tps, selectedSphere);
-    material.map.needsUpdate = true;
+    mainMaterial.map = mainStatsTexture.update(totalSent, ballCount, tps);
+    selectedMaterial.map = selectedTxTexture.update(selectedSphere);
+    mainMaterial.map.needsUpdate = true;
+    selectedMaterial.map.needsUpdate = true;
   };
 }
 
@@ -408,55 +496,62 @@ function calculateTilt(sphereCount) {
 
 function createToggleButton() {
   const container = document.getElementById('toggle-container');
-  
+ 
   // Create toggle wrapper
   const toggleWrapper = document.createElement('div');
   toggleWrapper.className = 'fixed top-4 left-4 flex items-center gap-2 opacity-70';
-  
+ 
   // Create the switch
   const toggleSwitch = document.createElement('label');
   toggleSwitch.className = 'relative inline-block w-12 h-6';
-  
+ 
   // Create the checkbox input
   const checkbox = document.createElement('input');
   checkbox.type = 'checkbox';
   checkbox.className = 'sr-only';
+  checkbox.checked = true;
   
-  // Create the slider
+  // Set initial value of ignoreZeroTransactions
+  window.ignoreZeroTransactions = !checkbox.checked;
+ 
+  // Create the slider with initial state matching checkbox
   const slider = document.createElement('span');
-  slider.className = `absolute cursor-pointer inset-0 rounded-full 
-    bg-gray-300 transition-colors duration-200
-    before:content-[''] before:absolute before:w-4 before:h-4 
+  slider.className = `absolute cursor-pointer inset-0 rounded-full
+    ${checkbox.checked ? 'bg-blue-600' : 'bg-gray-300'} transition-colors duration-200
+    before:content-[''] before:absolute before:w-4 before:h-4
     before:left-1 before:bottom-1 before:bg-white before:rounded-full
-    before:transition-transform before:duration-200`;
-  
-  // Create label text
+    before:transition-transform before:duration-200 ${checkbox.checked ? 'before:translate-x-6' : ''}`;
+ 
+  // Create label text with consistent font styling
   const label = document.createElement('span');
-  label.className = 'text-white font-semibold text-sm';
-  label.textContent = 'No 0-txs';
-  
+  // Set initial color based on checkbox state
+  label.className = `font-semibold text-sm ${checkbox.checked ? 'text-blue-400' : 'text-white'}`;
+  label.textContent = '0-txs';
+ 
   // Add click handler
   checkbox.addEventListener('change', () => {
-    window.ignoreZeroTransactions = checkbox.checked;
-    
+    window.ignoreZeroTransactions = !checkbox.checked;
+   
     // Update slider appearance
     if (checkbox.checked) {
-      slider.className = `absolute cursor-pointer inset-0 rounded-full 
+      slider.className = `absolute cursor-pointer inset-0 rounded-full
         bg-blue-600 transition-colors duration-200
-        before:content-[''] before:absolute before:w-4 before:h-4 
+        before:content-[''] before:absolute before:w-4 before:h-4
         before:left-1 before:bottom-1 before:bg-white before:rounded-full
         before:transition-transform before:duration-200 before:translate-x-6`;
-      label.className = 'text-white font-semibold';
+      // Update only the text color class
+      label.className = 'font-semibold text-sm text-blue-400';
     } else {
-      slider.className = `absolute cursor-pointer inset-0 rounded-full 
+      slider.className = `absolute cursor-pointer inset-0 rounded-full
         bg-gray-300 transition-colors duration-200
-        before:content-[''] before:absolute before:w-4 before:h-4 
+        before:content-[''] before:absolute before:w-4 before:h-4
         before:left-1 before:bottom-1 before:bg-white before:rounded-full
         before:transition-transform before:duration-200`;
-      label.className = 'text-white font-semibold';
+      // Update only the text color class
+      label.className = 'font-semibold text-sm text-white';
     }
   });
-  
+ 
   // Assemble the toggle
   toggleSwitch.appendChild(checkbox);
   toggleSwitch.appendChild(slider);
@@ -707,6 +802,8 @@ function createSphere(amount, txHash) {
     metalness: 0.9,
     roughness: 0.2,
     envMapIntensity: 1.5,
+    emissive: 0x000000,      // Add emissive for glow
+    emissiveIntensity: 0,    // Start with no glow
   });
   
   const sphere = new THREE.Mesh(geometry, material);
