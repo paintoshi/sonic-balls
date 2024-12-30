@@ -1,6 +1,8 @@
 // Three.js and Cannon.js setup
 let scene, camera, renderer, world;
-let spheres = [], sphereBodies = [];
+let spheres = [];
+let sphereBodies = [];
+let sphereQueue = [];
 let sphereData = [];
 let sonic_sent = 0;
 let selectedSphereGlobal = null;
@@ -9,8 +11,13 @@ let room;
 let hoveredSphere = null;
 let transactionTimes = [];
 let groundBody;
-const processedBlockHashes = new Set();
 let pendingRequest = null;
+let lastTime = performance.now();
+let lastSphereCreateTime = 0;
+const processedBlockHashes = new Set();
+
+// Make sphereQueue globally accessible for real-time count
+window.sphereQueue = sphereQueue;
 
 // TX settings
 const RPC_URL = "https://rpc.soniclabs.com";
@@ -20,7 +27,8 @@ const MAX_AMOUNT = 100000; // Max Sonic
 const TPS_WINDOW = 30000; // 30 seconds
 
 // Sphere settings
-const MAX_SPHERES = 1000; // Before FIFO
+const MAX_SPHERES = 1000; // Max displayed spheres
+const MAX_QUEUE_SIZE = 50000; // Max queue size
 const MIN_SPHERE_SIZE = 0.4;
 const MAX_SPHERE_SIZE = 10;
 const MIN_SPHERE_SEGMENTS = 10; // Resolution
@@ -28,6 +36,8 @@ const MAX_SPHERE_SEGMENTS = 40; // Resolution
 const BOUNCE_RESTITUTION = 0.5;
 const SELECTED_COLOR = 0xb92c89; // Magenta
 const GLOW_INTENSITY = 0.2;
+const SPHERE_CREATE_RATE = 200; // per second
+const MIN_CREATE_INTERVAL = 1000 / SPHERE_CREATE_RATE; // milliseconds between sphere creation
 
 // Ground settings
 const TILT_START = MAX_SPHERES / 2;  // Start tilting at half max
@@ -297,11 +307,11 @@ function createMainStatsTexture() {
   canvas.width = 520;
   canvas.height = 200;
   const ctx = canvas.getContext('2d');
-  
+ 
   function updateTexture(totalSent, ballCount, tps) {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
+   
     // Create gradient background
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     gradient.addColorStop(0, 'rgba(92, 61, 54, 1)');
@@ -342,13 +352,16 @@ function createMainStatsTexture() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
    
+    // Get real-time queue count
+    const currentQueueCount = window.sphereQueue ? window.sphereQueue.length : 0;
+    
     // Draw stats in white
-    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
     const xAdjustment = 6;
     const yAdjustment = canvas.height / 35;
+    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
     ctx.fillText(`Volume: ${totalSent.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 4})} S`, canvas.width/2 + xAdjustment, canvas.height/4 - yAdjustment);
     ctx.fillText(`TPS: ${tps}`, canvas.width/2 + xAdjustment, canvas.height/2 - yAdjustment);
-    ctx.fillText(`Balls: ${ballCount}`, canvas.width/2 + xAdjustment, canvas.height * 3/4 - yAdjustment);
+    ctx.fillText(`Balls: ${ballCount}/${currentQueueCount}`, canvas.width/2 + xAdjustment, canvas.height * 3/4 - yAdjustment);
     
     return new THREE.CanvasTexture(canvas);
   }
@@ -508,13 +521,14 @@ function createStatsDisplay() {
   window.updateStatsDisplay = (totalSent, ballCount, tps, selectedSphere) => {
     selectedSphereGlobal = selectedSphere;
     
-    // Update both textures
-    mainMaterial.map = mainStatsTexture.update(totalSent, ballCount, tps);
-    selectedTxTexture.update(selectedSphere);
+    // Update main stats
+    const newMainTexture = mainStatsTexture.update(totalSent, ballCount, tps);
+    mainMaterial.map = newMainTexture;
+    mainMaterial.needsUpdate = true;
     
-    // Mark both textures as needing update
-    mainMaterial.map.needsUpdate = true;
-    selectedMaterial.map.needsUpdate = true;
+    // Update selected transaction
+    selectedTxTexture.update(selectedSphere);
+    selectedMaterial.needsUpdate = true;
   };
 }
 
@@ -849,6 +863,8 @@ function createSphere(amount, txHash) {
   sphereData.push({ hash: txHash, amount: amount });
 
   // Clean up old spheres if too many
+  /**
+   * Not needed if we only add at a certain rate and never go beyond MAX_SPHERES
   if (spheres.length > MAX_SPHERES) {
     const oldSphere = spheres.shift();
     const oldBody = sphereBodies.shift();
@@ -858,6 +874,7 @@ function createSphere(amount, txHash) {
     scene.remove(oldSphere);
     world.remove(oldBody);
   }
+  */
 }
 
 // RPC Functions
@@ -1017,30 +1034,49 @@ function pollForNewBlocks() {
 function processTransaction(txData) {
   // Check if we should ignore this transaction
   if (window.ignoreZeroTransactions && txData.amount <= 0.000000000000000001) {
-    return; // Skip this transaction
+    return;
   }
   
+  // Add to total Sonic sent
   sonic_sent += txData.amount;
-  createSphere(txData.amount, txData.hash);
   
-  // Record transaction time
+  // Add to queue if not full
+  if (sphereQueue.length < MAX_QUEUE_SIZE) {
+    sphereQueue.push(txData);
+  }
+  
+  // Record transaction time for TPS calculation
   transactionTimes.push(Date.now());
   
-  // Update 3D display
+  // Update stats display immediately after queue change
   if (window.updateStatsDisplay) {
-    window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
+    requestAnimationFrame(() => {
+      window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
+    });
   }
 }
-
-let lastTime = performance.now();
 
 function animate() {
   requestAnimationFrame(animate);
   
   // Calculate delta time
   const currentTime = performance.now();
-  let deltaTime = currentTime - lastTime;
+  const deltaTime = currentTime - lastTime;
   lastTime = currentTime;
+  
+  // Process queue at specified rate
+  if (sphereQueue.length > 0 && spheres.length < MAX_SPHERES) {
+    if (currentTime - lastSphereCreateTime >= MIN_CREATE_INTERVAL) {
+      const txData = sphereQueue.shift();
+      createSphere(txData.amount, txData.hash);
+      lastSphereCreateTime = currentTime;
+      
+      // Update stats immediately after state change but not faster than 500ms
+      if (window.updateStatsDisplay && currentTime - lastSphereCreateTime >= 500) {
+        window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
+      }
+    }
+  }
   
   // Calculate current tilt
   const tiltAngle = calculateTilt(spheres.length);
@@ -1078,7 +1114,7 @@ function animate() {
     spheres[i].quaternion.copy(sphereBodies[i].quaternion);
   }
   
-  // Remove spheres that have fallen below a certain point
+  // Clean up fallen spheres
   for (let i = spheres.length - 1; i >= 0; i--) {
     if (spheres[i].position.y < -70) {
       spheres[i].geometry.dispose();
