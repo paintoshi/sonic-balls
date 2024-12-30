@@ -41,7 +41,7 @@ const MIN_CREATE_INTERVAL = 1000 / SPHERE_CREATE_RATE; // milliseconds between s
 
 // Ground settings
 const TILT_START = MAX_SPHERES / 2;  // Start tilting at half max
-const MAX_TILT = Math.PI / 36;      // 5 degree in radians max tilt
+const MAX_TILT = Math.PI / 30;      // 6 degree in radians max tilt
 
 // Environment settings
  // target fps (higher = more cpu)
