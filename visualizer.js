@@ -806,9 +806,9 @@ function createSphere(amount, txHash) {
   
   // Random position above the scene with more height variation
   sphereBody.position.set(
-    (Math.random() - 0.5) * 20,  // x: -10 to 10
+    (Math.random() - 0.5) * 30,  // x: -15 to 15
     50 + (Math.random() * 60),   // y: 50 to 110
-    (Math.random() - 0.5) * 20   // z: -10 to 10
+    (Math.random() - 0.5) * 30   // z: -15 to 15
   );
   
   world.add(sphereBody);
