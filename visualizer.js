@@ -33,7 +33,7 @@ const MIN_SPHERE_SIZE = 0.4;
 const MAX_SPHERE_SIZE = 10;
 const MIN_SPHERE_SEGMENTS = 10; // Resolution
 const MAX_SPHERE_SEGMENTS = 40; // Resolution
-const BOUNCE_RESTITUTION = 0.5;
+const BOUNCE_RESTITUTION = 0.4;
 const SELECTED_COLOR = 0xb92c89; // Magenta
 const GLOW_INTENSITY = 0.2;
 const SPHERE_CREATE_RATE = 200; // per second
@@ -360,8 +360,8 @@ function createMainStatsTexture() {
     const yAdjustment = canvas.height / 35;
     ctx.fillStyle = 'rgba(255, 255, 255, 1)';
     ctx.fillText(`Volume: ${totalSent.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 4})} S`, canvas.width/2 + xAdjustment, canvas.height/4 - yAdjustment);
-    ctx.fillText(`TPS: ${tps}`, canvas.width/2 + xAdjustment, canvas.height/2 - yAdjustment);
-    ctx.fillText(`Balls: ${ballCount}/${currentQueueCount}`, canvas.width/2 + xAdjustment, canvas.height * 3/4 - yAdjustment);
+    ctx.fillText(`Balls/Queue: ${ballCount}/${currentQueueCount}`, canvas.width/2 + xAdjustment, canvas.height / 2 - yAdjustment);
+    ctx.fillText(`TPS: ${tps}`, canvas.width/2 + xAdjustment, canvas.height * 3/4 - yAdjustment);
     
     return new THREE.CanvasTexture(canvas);
   }
@@ -805,8 +805,10 @@ function createSphere(amount, txHash) {
   });
   
   // Random position above the scene with more height variation
+  // Use lower x range on mobile
+  const xRange = window.innerWidth < 800 ? 20 : 30;
   sphereBody.position.set(
-    (Math.random() - 0.5) * 30,  // x: -15 to 15
+    (Math.random() - 0.5) * xRange,  // x: -15 to 15
     50 + (Math.random() * 60),   // y: 50 to 110
     (Math.random() - 0.5) * 30   // z: -15 to 15
   );
@@ -1072,7 +1074,7 @@ function animate() {
       lastSphereCreateTime = currentTime;
       
       // Update stats immediately after state change but not faster than 500ms
-      if (window.updateStatsDisplay && currentTime - lastSphereCreateTime >= 500) {
+      if (window.updateStatsDisplay && currentTime - lastSphereCreateTime >= 250) {
         window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
       }
     }
