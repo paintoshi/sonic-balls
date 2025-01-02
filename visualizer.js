@@ -50,9 +50,9 @@ const MAX_TIME_STEP = 1 / 20;
 // down force
 const GRAVITY = 9;
 // ambient light
-const AMBIENT_INTENSITY = 0.5;
+const AMBIENT_INTENSITY = 0.8;
 // directional light
-const DIRECTIONAL_INTENSITY = 1.2;
+const DIRECTIONAL_INTENSITY = 1;
 
 // Set up tooltip
 const tooltipDiv = document.createElement('div');
@@ -632,11 +632,11 @@ async function init() {
   createStatsDisplay();
 
   // Rest of the init function remains the same...
-  const ambientLight = new THREE.AmbientLight(0x666666, AMBIENT_INTENSITY);
+  const ambientLight = new THREE.AmbientLight(0xffffff, AMBIENT_INTENSITY);
   scene.add(ambientLight);
 
   const directionalLight = new THREE.DirectionalLight(0xffead2, DIRECTIONAL_INTENSITY);
-  directionalLight.position.set(10, 20, 20);
+  directionalLight.position.set(15, 25, 20);
   directionalLight.castShadow = false;
   scene.add(directionalLight);
 
@@ -851,8 +851,8 @@ function createSphere(amount, txHash) {
   const material = new THREE.MeshStandardMaterial({
     color: sphereColor,
     metalness: 0.9,
-    roughness: 0.2,
-    envMapIntensity: 1.5,
+    roughness: 0.3,
+    envMapIntensity: 1,
     emissive: 0x000000,      // Add emissive for glow
     emissiveIntensity: 0,    // Start with no glow
   });
