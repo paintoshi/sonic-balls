@@ -14,7 +14,11 @@ let groundBody;
 let pendingRequest = null;
 let lastTime = performance.now();
 let lastSphereCreateTime = 0;
+let isAnimating = true;
+let stopSphereCreation = null;
+let stopPolling = null;
 const processedBlockHashes = new Set();
+const isVisibilitySupported = typeof document.hidden !== "undefined";
 
 // Make sphereQueue globally accessible for real-time count
 window.sphereQueue = sphereQueue;
@@ -75,6 +79,55 @@ const isTouchDevice = () => {
      (navigator.maxTouchPoints > 0) ||
      (navigator.msMaxTouchPoints > 0));
 };
+
+// Add visibility change handler function
+function handleVisibilityChange() {
+  if (document.hidden) {
+    // User left the tab
+    console.log('User left the tab');
+    pauseSimulation();
+  } else {
+    // User returned to the tab
+    console.log('User returned to the tab');
+    resumeSimulation();
+  }
+}
+
+// Pause all animations and updates
+function pauseSimulation() {
+  console.log('Pausing simulation');
+  isAnimating = false;
+  
+  // Stop sphere creation loop
+  if (stopSphereCreation) {
+    stopSphereCreation();
+    stopSphereCreation = null;
+  }
+  
+  // Stop polling loop
+  if (stopPolling) {
+    stopPolling();
+    stopPolling = null;
+  }
+}
+
+// Resume all animations and updates
+function resumeSimulation() {
+  if (!isAnimating) {
+    console.log('Resuming simulation');
+    isAnimating = true;
+    
+    // Restart animation loop
+    lastTime = performance.now(); // Reset time delta
+    animate();
+    
+    // Restart sphere creation
+    stopSphereCreation = startSphereCreationLoop();
+    
+    // Restart polling
+    stopPolling = pollForNewBlocks();
+  }
+}
 
 // Add mousemove event listener
 function setupMouseHandlers() {
@@ -654,11 +707,23 @@ async function init() {
   // Detect on click
   setupMouseHandlers();
 
-  // Start animation loop
+  // Start all animations
+  isAnimating = true;
   animate();
+  stopSphereCreation = startSphereCreationLoop();
+  stopPolling = pollForNewBlocks();
 
   // Handle window resize
   window.addEventListener('resize', onWindowResize, false);
+
+  // Handle visibility change
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, setting up visibility handler');
+    document.addEventListener("visibilitychange", handleVisibilityChange, false);
+  });
+  
+  // Add cleanup on page unload
+  window.addEventListener('beforeunload', cleanup);
 }
 
 // Ground logo texture
@@ -1058,7 +1123,66 @@ function processTransaction(txData) {
   }
 }
 
+
+// Separate loop for sphere creation
+function startSphereCreationLoop() {
+  let isRunning = true;
+
+  async function createSphereFromQueue() {
+    if (!isRunning) return;
+
+    const currentTime = performance.now();
+
+    if (sphereQueue.length > 0 && spheres.length < MAX_SPHERES) {
+      if (currentTime - lastSphereCreateTime >= MIN_CREATE_INTERVAL) {
+        const txData = sphereQueue.shift();
+        createSphere(txData.amount, txData.hash);
+        lastSphereCreateTime = currentTime;
+        
+        if (window.updateStatsDisplay && currentTime - lastSphereCreateTime >= 500) {
+          window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
+        }
+      }
+    }
+
+    requestAnimationFrame(createSphereFromQueue);
+  }
+
+  createSphereFromQueue();
+  return () => {
+    isRunning = false;
+  };
+}
+
+// Total cleanup function (for page unload)
+function cleanup() {
+  console.log('Cleaning up resources...');
+  pauseSimulation();
+  
+  // Clean up existing spheres
+  spheres.forEach(sphere => {
+    sphere.geometry.dispose();
+    sphere.material.dispose();
+    scene.remove(sphere);
+  });
+  
+  sphereBodies.forEach(body => {
+    world.remove(body);
+  });
+  
+  // Clear arrays
+  spheres = [];
+  sphereBodies = [];
+  sphereData = [];
+  sphereQueue = [];
+  
+  // Clean up Three.js resources
+  renderer.dispose();
+}
+
 function animate() {
+  if (!isAnimating) return;
+  
   requestAnimationFrame(animate);
   
   // Calculate delta time
@@ -1066,48 +1190,25 @@ function animate() {
   const deltaTime = currentTime - lastTime;
   lastTime = currentTime;
   
-  // Process queue at specified rate
-  if (sphereQueue.length > 0 && spheres.length < MAX_SPHERES) {
-    if (currentTime - lastSphereCreateTime >= MIN_CREATE_INTERVAL) {
-      const txData = sphereQueue.shift();
-      createSphere(txData.amount, txData.hash);
-      lastSphereCreateTime = currentTime;
-      
-      // Update stats immediately after state change but not faster than 500ms
-      if (window.updateStatsDisplay && currentTime - lastSphereCreateTime >= 250) {
-        window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
-      }
-    }
-  }
-  
   // Calculate current tilt
   const tiltAngle = calculateTilt(spheres.length);
   
   // Update ground rotation
   if (ground && ground.position.y !== undefined) {
     // Adjust the rotation point to be at the surface center
-    const heightOffset = 2; // Half of the ground's height
-    
+    const heightOffset = 2;
     // Move ground up by height, rotate, then move back down
     ground.position.y = groundBody.position.y + heightOffset;
     ground.rotation.x = tiltAngle;
     ground.position.z = -Math.sin(tiltAngle) * heightOffset;
     ground.position.y -= Math.cos(tiltAngle) * heightOffset;
-    
     // Update physics body rotation
     groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), tiltAngle);
   }
   
-  /**
-  world.defaultContactMaterial.contactEquationStiffness = 1e8;
-  world.defaultContactMaterial.contactEquationRelaxation = 3;
-  */
-  
   // Step physics simulation
   // world.step(FIXED_TIME_STEP, deltaTime, MAX_SUB_STEPS);
-  // Lower step size on lower frame rates (120 animates/s will be TIME_STEP)
   world.step(Math.min(TIME_STEP * (deltaTime / 7), MAX_TIME_STEP));
-  // Simulation complexity (lower for better performance)
   world.solver.iterations = 5;
   
   // Update sphere positions
@@ -1141,4 +1242,3 @@ function onWindowResize() {
 
 // Initialize everything
 init();
-pollForNewBlocks();
