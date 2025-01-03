@@ -715,13 +715,17 @@ async function init() {
   window.addEventListener('resize', onWindowResize, false);
 
   // Handle visibility change
+  /** Does not seem to trigger for some reason
   document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded, setting up visibility handler');
     document.addEventListener("visibilitychange", handleVisibilityChange, false);
   });
+  */
   
   // Add cleanup on page unload
+  /** Does not seem to trigger for some reason
   window.addEventListener('beforeunload', cleanup);
+  */
 }
 
 // Ground logo texture
