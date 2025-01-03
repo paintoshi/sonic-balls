@@ -40,8 +40,6 @@ const MAX_SPHERE_SEGMENTS = 40; // Resolution
 const BOUNCE_RESTITUTION = 0.4;
 const SELECTED_COLOR = 0xb92c89; // Magenta
 const GLOW_INTENSITY = 0.2;
-const SPHERE_CREATE_RATE = 200; // per second
-const MIN_CREATE_INTERVAL = 1000 / SPHERE_CREATE_RATE; // milliseconds between sphere creation
 
 // Ground settings
 const TILT_START = MAX_SPHERES / 2;  // Start tilting at half max
@@ -874,7 +872,7 @@ function createSphere(amount, txHash) {
   const xRange = window.innerWidth < 800 ? 20 : 30;
   sphereBody.position.set(
     (Math.random() - 0.5) * xRange,  // x: -15 to 15
-    50 + (Math.random() * 60),   // y: 50 to 110
+    50 + (Math.random() * 30),   // y: 50 to 80
     (Math.random() - 0.5) * 30   // z: -15 to 15
   );
   
@@ -1127,6 +1125,9 @@ function processTransaction(txData) {
 // Separate loop for sphere creation
 function startSphereCreationLoop() {
   let isRunning = true;
+  const SPHERES_PER_BATCH = 10;
+  const CREATION_RATE = 25; // per second
+  const MIN_BATCH_INTERVAL = 1000 / CREATION_RATE;
 
   async function createSphereFromQueue() {
     if (!isRunning) return;
@@ -1134,9 +1135,19 @@ function startSphereCreationLoop() {
     const currentTime = performance.now();
 
     if (sphereQueue.length > 0 && spheres.length < MAX_SPHERES) {
-      if (currentTime - lastSphereCreateTime >= MIN_CREATE_INTERVAL) {
-        const txData = sphereQueue.shift();
-        createSphere(txData.amount, txData.hash);
+      if (currentTime - lastSphereCreateTime >= MIN_BATCH_INTERVAL) {
+        // Create up to 10 spheres per batch, or however many are in queue
+        const spheresToCreate = Math.min(
+          SPHERES_PER_BATCH,
+          sphereQueue.length,
+          MAX_SPHERES - spheres.length
+        );
+
+        for (let i = 0; i < spheresToCreate; i++) {
+          const txData = sphereQueue.shift();
+          createSphere(txData.amount, txData.hash);
+        }
+        
         lastSphereCreateTime = currentTime;
         
         if (window.updateStatsDisplay && currentTime - lastSphereCreateTime >= 500) {
