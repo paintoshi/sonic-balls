@@ -14,6 +14,7 @@ let groundBody;
 let pendingRequest = null;
 let lastTime = performance.now();
 let lastSphereCreateTime = 0;
+let lastStatsUpdate = 0;
 let isAnimating = true;
 let stopSphereCreation = null;
 let stopPolling = null;
@@ -1129,15 +1130,14 @@ function processTransaction(txData) {
 // Separate loop for sphere creation
 function startSphereCreationLoop() {
   let isRunning = true;
-  const SPHERES_PER_BATCH = 10;
-  const CREATION_RATE = 25; // per second
+  const SPHERES_PER_BATCH = 20;
+  const CREATION_RATE = 12.5; // per second
   const MIN_BATCH_INTERVAL = 1000 / CREATION_RATE;
-
-  async function createSphereFromQueue() {
+  
+  const intervalId = setInterval(() => {
     if (!isRunning) return;
 
     const currentTime = performance.now();
-
     if (sphereQueue.length > 0 && spheres.length < MAX_SPHERES) {
       if (currentTime - lastSphereCreateTime >= MIN_BATCH_INTERVAL) {
         // Create up to 10 spheres per batch, or however many are in queue
@@ -1146,26 +1146,23 @@ function startSphereCreationLoop() {
           sphereQueue.length,
           MAX_SPHERES - spheres.length
         );
-
         for (let i = 0; i < spheresToCreate; i++) {
           const txData = sphereQueue.shift();
           createSphere(txData.amount, txData.hash);
         }
         
         lastSphereCreateTime = currentTime;
-        
-        if (window.updateStatsDisplay && currentTime - lastSphereCreateTime >= 500) {
-          window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
-        }
       }
     }
+    if (window.updateStatsDisplay && currentTime - lastStatsUpdate >= 1000) {
+      lastStatsUpdate = currentTime;
+      window.updateStatsDisplay(sonic_sent, spheres.length, calculateTPS(), selectedSphereGlobal);
+    }
+  }, MIN_BATCH_INTERVAL);
 
-    requestAnimationFrame(createSphereFromQueue);
-  }
-
-  createSphereFromQueue();
   return () => {
     isRunning = false;
+    clearInterval(intervalId);
   };
 }
 
