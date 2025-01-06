@@ -12,5 +12,5 @@ If you fork and find it useful, please consider give a tiny EVM compatible donat
 
 ## More
 
-- [Me](https://paintoshi.dev)
+- [Website](https://paintoshi.dev)
 - [Twitter](https://x.com/paintoshi)
